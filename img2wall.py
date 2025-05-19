@@ -2,6 +2,60 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from random import randrange
+from tabulate import tabulate
+
+
+def sotr_cor(ar_cor, out_img):
+    lines = []
+    line = []
+    visited = set()
+    points = ar_cor
+    # prev_i = len(ar_cor) - 1
+    # prev_i1 = ar_cor[-2]
+    # for i in range(0, len(ar_cor)):
+    #     x, y = ar_cor[i].ravel()
+    #     for i1 in range(len(ar_cor)):
+    #         x1, y1 = ar_cor[i1].ravel()
+    #         if x != x1 and y != y1:
+    #             if i % 2 == 1:
+    #                 if (y == y1) or(y == (y1-1)) or (y == (y1+1)):
+    #                     cv2.line(out_img, (x, y), (x1, y1), (0, 255, 0), 3)
+    #                     line = x,y,x1,y1
+    #                     break
+    #             else:
+    #                 if (x == x1) or (x == (x1 - 1)) or (x == (x1 + 1)):
+    #                     cv2.line(out_img, (x, y), (x1, y1), (0, 0, 255), 2)
+    #                     line = x,y,x1,y1
+    #                     break
+    #         lines.append(line)
+    #
+    #     prev_i = i
+
+    def find_cycle(current, prev_coord='y'):
+        # if len(lines) == len(points) and lines[0] == current:
+        if lines[0] == current:
+            return lines
+        if current in visited:
+            return None
+        visited.add(current)
+        x, y = current
+        next_coord = 'x' if prev_coord == 'y' else 'y'
+        for point in points:
+            px, py = point
+            if next_coord == 'x' and abs(px - x) == 1:
+                result = find_cycle(point, 'x')
+                if result:
+                    lines.append(point)
+                    return lines
+            elif next_coord == 'y' and abs(py - y) == 1:
+                result = find_cycle(point, 'y')
+                if result:
+                    lines.append(point)
+                    return lines
+        visited.remove(current)
+        return None
+
+    print(lines)
 
 def add_white_border(image, border_size=20):
     """
@@ -69,7 +123,8 @@ def detect_and_draw_lines(image, output_image):
     if lines is not None:
         for line in lines:
             x1, y1, x2, y2 = line[0]
-            cv2.line(output_image, (x1, y1), (x2, y2), (255, 255, 0), 2)
+            # cv2.line(output_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
+    return lines
 
 def detect_and_draw_squar(image, output_image):
     """
@@ -94,7 +149,8 @@ def detect_and_draw_squar(image, output_image):
     if lines is not None:
         for line in lines:
             x1, y1, x2, y2 = line[0]
-            cv2.line(output_image, (x1, y1), (x2, y2), (255, 255, 0), 2)
+            # cv2.line(output_image, (x1, y1), (x2, y2), (255, 255, 0), 2)
+    return lines
 
 def detect_corner(image, output_image):
     corners = cv2.goodFeaturesToTrack(image, 300, .06, 5)
@@ -102,11 +158,27 @@ def detect_corner(image, output_image):
 
     for i in corners:
         x, y = i.ravel()
-        cv2.circle(output_image, (x, y), 3, (255, 0, 0), -1)  # Используем красный цвет (в RGB)
+        cv2.circle(output_image, (x, y), 3, (0, 0, 255), -1)  # Используем красный цвет (в RGB)
     return corners
 
 
-def process_floor_plan(image_path, border_size=5):
+def replace_gray_in_monochrome(image, lower_gray=50, upper_gray=210, target_value=255):
+    """
+    Заменяет диапазон серых пикселей в монохромном изображении на белые.
+
+    Параметры:
+    - image: одноканальное изображение (numpy array).
+    - lower_gray: нижняя граница серого (0-255).
+    - upper_gray: верхняя граница серого (0-255).
+    - target_value: целевое значение (по умолчанию 255 — белый).
+    """
+    # Создаем маску пикселей в заданном диапазоне
+    mask = (image >= lower_gray) & (image <= upper_gray)
+    # Заменяем пиксели на целевое значение
+    image[mask] = target_value
+    return image
+
+def process_floor_plan(image_path, border_size=10):
     """
     Основная функция обработки плана помещения
     :param image_path: Путь к исходному изображению
@@ -137,44 +209,44 @@ def process_floor_plan(image_path, border_size=5):
     binary_image = apply_adaptive_threshold(gray_image)
 
     # Морфологическая обработка для устранения шума
-    kernel = np.ones((5, 5), np.uint8)
+    kernel = np.ones((10, 10), np.uint8)
     cleaned_image = cv2.morphologyEx(gray_image, cv2.MORPH_CLOSE, kernel, iterations=2)
 
     # Детекция и отрисовка линий
-    #detect_and_draw_lines(cleaned_image, bordered_image)
-    #detect_and_draw_squar(cleaned_image, bordered_image)
-    corner = detect_corner(cleaned_image, bordered_image)
-    print(corner)
+    # line1 = detect_and_draw_lines(cleaned_image, bordered_image)
+    # line2 = detect_and_draw_squar(cleaned_image, original_image)
+    # corner = detect_corner(cleaned_image, gray_image)
+
+    processed_image = replace_gray_in_monochrome(cleaned_image)
+    processed_image = replace_gray_in_monochrome(processed_image, 0, 10, 0)
 
     # Поиск контуров
-    contours, _ = cv2.findContours(cleaned_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(processed_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     # Фильтрация контуров рамки
     filtered_contours = []
-    border_margin = 5
-    image_height, image_width = cleaned_image.shape
+    border_margin = -10
+    image_height, image_width = processed_image.shape
 
-    # for contour in contours:
-    #     print(contour)
-    #
-    #     # rect = cv2.minAreaRect(contour)
-    #     # box = cv2.boxPoints(rect)
-    #     # box = np.intp(box)
-    #     # cv2.drawContours(bordered_image, [box], 0, (randrange(256), randrange(256), randrange(256)), randrange(6))
-    #     x, y, w, h = cv2.boundingRect(contour)
-    #     if (x > border_size + border_margin
-    #             and y > border_size + border_margin
-    #             and (x + w) < (image_width - border_size - border_margin)
-    #             and (y + h) < (image_height - border_size - border_margin)):
-    #         filtered_contours.append(contour)
-    prev_i = corner[-1]
-    for i in corner:
-        x, y = i.ravel()
-        x1, y1 = prev_i.ravel()
+    for i, contour in enumerate(contours):
+        # print(contour)
+        x, y, w, h = cv2.boundingRect(contour)
+        if (x > border_size + border_margin
+                and y > border_size + border_margin
+                and (x + w) < (image_width - border_size - border_margin)
+                and (y + h) < (image_height - border_size - border_margin)):
+            filtered_contours.append(contour)
+            cv2.drawContours(bordered_image, [contour], 0, (randrange(50,256), randrange(50, 256), randrange(50, 256)), 6)
+        contour_points = contour.reshape(-1, 2)
 
-
-
-        prev_i = i
+        # Вывод таблицы для каждого контура
+        print(f"\nКонтур #{i + 1}:")
+        print(tabulate(
+            contour_points,
+            headers=['X', 'Y'],
+            tablefmt="grid",
+            showindex="always"
+        ))
 
     # Визуализация промежуточных результатов
     debug_images = [
@@ -182,7 +254,8 @@ def process_floor_plan(image_path, border_size=5):
         bordered_image,
         gray_image,
         binary_image,
-        cleaned_image
+        cleaned_image,
+        processed_image
     ]
 
     # Конвертация BGR в RGB для корректного отображения
@@ -194,7 +267,8 @@ def process_floor_plan(image_path, border_size=5):
         'Bordered Image',
         'Grayscale',
         'Binary Image',
-        'Cleaned Image'
+        'Cleaned Image',
+        'Cleaned 1 Image'
     ]
 
     plt.figure(figsize=(15, 10))
@@ -208,10 +282,13 @@ def process_floor_plan(image_path, border_size=5):
 
     #cv2.imwrite('output.png', cleaned_image)
 
-    # if not filtered_contours:
-    #     raise ValueError("Не обнаружено стен. Проверьте параметры обработки изображения.")
+    if not filtered_contours:
+        raise ValueError("Не обнаружено стен. Проверьте параметры обработки изображения.")
 
     # Корректировка координат контуров (удаление рамки)
     wall_contours = [cnt - border_size for cnt in filtered_contours]
 
-    return corner, (original_height, original_width)
+    # print(wall_contours)
+
+    # return sorted_corner, (original_height, original_width)
+    return wall_contours, (original_height, original_width)

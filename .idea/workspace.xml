@@ -4,14 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ab19be21-686b-48e6-94ed-00fa0fcf6674" name="Changes" comment="1">
-      <change afterPath="$PROJECT_DIR$/corner.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/corner2.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/filter.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/img2wall.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/proc.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+    <list default="true" id="ab19be21-686b-48e6-94ed-00fa0fcf6674" name="Changes" comment="Находим Углы">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/filter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/img2wall.py" beforeDir="false" afterPath="$PROJECT_DIR$/img2wall.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -40,18 +36,18 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python.corner.executor": "Run",
-    "Python.corner2.executor": "Run",
-    "Python.filter.executor": "Run",
-    "Python.img2wall.executor": "Run",
-    "Python.main.executor": "Run",
-    "Python.proc.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "master"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.corner.executor&quot;: &quot;Run&quot;,
+    &quot;Python.corner2.executor&quot;: &quot;Run&quot;,
+    &quot;Python.filter.executor&quot;: &quot;Run&quot;,
+    &quot;Python.img2wall.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.proc.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;
   }
-}]]></component>
+}</component>
   <component name="RunManager">
     <configuration name="main" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <module name="Pract_Prog_F" />
@@ -100,7 +96,15 @@
       <option name="project" value="LOCAL" />
       <updated>1747026742744</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Находим Углы">
+      <option name="closed" value="true" />
+      <created>1747220003076</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1747220003076</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -128,6 +132,7 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="1" />
-    <option name="LAST_COMMIT_MESSAGE" value="1" />
+    <MESSAGE value="Находим Углы" />
+    <option name="LAST_COMMIT_MESSAGE" value="Находим Углы" />
   </component>
 </project>

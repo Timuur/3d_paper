@@ -2,6 +2,9 @@ import cv2
 import numpy as np
 import trimesh
 import matplotlib.pyplot as plt
+from Cython.Shadow import py_int
+from tabulate import tabulate
+
 import img2wall as i2w
 
 
@@ -52,8 +55,9 @@ def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0, thicknes
     """
     scene_objects = []
 
-    for contour in wall_contours:
-        # Преобразование и проверка структуры контура
+    # Обрабатываем все контуры
+    for i, contour in enumerate(wall_contours):
+        # Преобразование контура в массив точек
         contour_points = np.array(contour).reshape(-1, 2)
 
         # Пропускаем некорректные контуры
@@ -61,16 +65,36 @@ def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0, thicknes
             print(f"Пропущен контур с {len(contour_points)} точками")
             continue
 
-        # Масштабирование координат
+        print(f"\nКонтур #{i + 1}:")
+        print(tabulate(
+            contour_points,
+            headers=['X', 'Y'],
+            tablefmt="grid",
+            showindex="always"
+        ))
+
+        # Масштабирование координат для текущего контура
         scaled_points = contour_points * scale
 
-        # Создаем стены между последовательными точками
-        for i in range(len(scaled_points)):
-            current_point = scaled_points[i]
-            next_point = scaled_points[(i + 1) % len(scaled_points)]
+        # Отладочный вывод масштабированных точек
+        print(f"\nМасштабированные точки контура #{i + 1}:")
+        print(tabulate(
+            scaled_points,
+            headers=['X', 'Y'],
+            tablefmt="fancy_grid",
+            showindex="always"
+        ))
 
-            # Проверка минимальной длины стены
-            if np.linalg.norm(next_point - current_point) < 0.001:
+        # Создаем стены между последовательными точками контура
+        for j in range(len(scaled_points)):
+            current_point = scaled_points[j]
+            next_point = scaled_points[(j + 1) % len(scaled_points)]
+            wall_length = np.linalg.norm(next_point - current_point)
+
+            print(f"Точка {j}: длина стены = {wall_length:.2f} м")
+
+            # Пропускаем слишком короткие стены
+            if wall_length < 0.001:
                 print(f"Пропущена стена нулевой длины между {current_point} и {next_point}")
                 continue
 
@@ -95,12 +119,12 @@ def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0, thicknes
 if __name__ == "__main__":
     try:
         # Обработка плана помещения
-        wall_contours, image_size = i2w.process_floor_plan("test/s1_1_1s-1.jpg")
+        wall_contours, image_size = i2w.process_floor_plan("test/0011.jpg")
 
         # Параметры моделирования
-        MODEL_SCALE = 0.05  # 1 пиксель = 5 см
+        MODEL_SCALE = 0.05 # 1 пиксель = 5 см
         WALL_HEIGHT = 2.7  # Высота потолков 2.7 метра
-        WALL_THICKNESS = 0.2  # Толщина стен 20 см
+        WALL_THICKNESS = 0.3  # Толщина стен 20 см
 
         # Создание 3D-модели
         scene = build_3d_model(
