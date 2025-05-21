@@ -2,8 +2,8 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from random import randrange
+from scipy.spatial import distance
 
-from decorator import append
 from tabulate import tabulate
 
 
@@ -234,9 +234,64 @@ def process_floor_plan(image_path, border_size=10):
     filtered_contours = []
     border_margin = -10
     image_height, image_width = processed_image.shape
+
     #_________________________________________________________________________________________
-
-
+    # print(corners)
+    #
+    # print(contours)
+    #
+    # # Исходные данные (пример)
+    # first_array = np.array(corners)  # Первый массив точек
+    # sub_arrays = contours  # Кортеж подмассивов из второго массива
+    #
+    # all_second_points = []
+    # for i, sub in enumerate(sub_arrays):
+    #     for point in sub:
+    #         x1, y1, _, _ = cv2.boundingRect(point)  # Доступ к координатам через [0][0] и [0][1]
+    #         all_second_points.append((x1, y1, i, sub))
+    #
+    # # Корректное создание множеств для сравнения
+    # first_points_set = set((p[0][0], p[0][1]) for p in first_array)
+    # second_points_set = set((x, y) for x, y, _, _ in all_second_points)
+    #
+    # # Поиск отсутствующих точек с сохранением 3D-структуры
+    # missing_points = [np.array([[[x, y]]]) for x, y in first_points_set
+    #                   if (x, y) not in second_points_set]
+    #
+    # # Функция поиска ближайшей точки
+    # def find_closest(target, points):
+    #     min_dist = float('inf')
+    #     closest = None
+    #     for p in points:
+    #         d = distance.euclidean(target, (p[0], p[1]))
+    #         if d < min_dist:
+    #             min_dist = d
+    #             closest = p
+    #     return closest
+    #
+    # # Вставка точек с учётом 3D-структуры
+    # for mp in missing_points:
+    #     x_val, y_val = mp[0][0][0], mp[0][0][1]  # Доступ через три уровня индексов
+    #     closest_info = find_closest((x_val, y_val), all_second_points)
+    #
+    #     if closest_info:
+    #         closest_x, closest_y, sub_idx, sub = closest_info
+    #         # Поиск позиции с учётом 3D-структуры
+    #         position = np.where((sub == [[[closest_x, closest_y]]]).all(axis=2))[0][0]
+    #
+    #         # Создание новой точки с правильной размерностью (1,1,2)
+    #         new_point = np.array([[[x_val, y_val]]], dtype=sub.dtype)
+    #
+    #         # Вставка с сохранением размерности
+    #         updated_sub = np.insert(sub, position + 1, new_point, axis=0)
+    #
+    #         # Обновление подмассивов
+    #         sub_arrays = list(sub_arrays)
+    #         sub_arrays[sub_idx] = updated_sub
+    #         sub_arrays = tuple(sub_arrays)
+    #
+    # print(sub_arrays)
+    # contours = sub_arrays
     # _________________________________________________________________________________________
 
     for i, contour in enumerate(contours):

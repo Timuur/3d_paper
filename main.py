@@ -134,7 +134,7 @@ if __name__ == "__main__":
         # Параметры моделирования
         MODEL_SCALE = 0.05 # 1 пиксель = 5 см
         WALL_HEIGHT = 20  # Высота потолков 2.7 метра
-        WALL_THICKNESS = 0.3  # Толщина стен 20 см
+        WALL_THICKNESS = 0.001  # Толщина стен 20 см
 
         # Создание 3D-модели
         scene = build_3d_model(
