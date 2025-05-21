@@ -60,6 +60,13 @@ def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0, thicknes
         # Преобразование контура в массив точек
         contour_points = np.array(contour).reshape(-1, 2)
 
+        contour_cv = contour.reshape(-1, 1, 2).astype(np.int32)
+
+        # Упрощаем контур алгоритмом Рамера-Дугласа-Пьюкера
+        epsilon_val = 0.0003 * cv2.arcLength(contour_cv, closed=True)
+        approx_cv = cv2.approxPolyDP(contour_cv, epsilon_val, closed=True)
+        contour_points = approx_cv.squeeze()
+
         # Пропускаем некорректные контуры
         if len(contour_points) < 2:
             print(f"Пропущен контур с {len(contour_points)} точками")
@@ -94,9 +101,13 @@ def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0, thicknes
             print(f"Точка {j}: длина стены = {wall_length:.2f} м")
 
             # Пропускаем слишком короткие стены
-            if wall_length < 0.001:
+            while wall_length < 0.01:
                 print(f"Пропущена стена нулевой длины между {current_point} и {next_point}")
-                continue
+                next_point = scaled_points[(j + 1) % len(scaled_points)]
+                wall_length = np.linalg.norm(next_point - current_point)
+                j = j+1
+                print(f"Точка {j}: длина стены = {wall_length:.2f} м")
+                # continue
 
             try:
                 wall = create_3d_wall(
@@ -115,7 +126,6 @@ def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0, thicknes
 
     return trimesh.Scene(scene_objects)
 
-
 if __name__ == "__main__":
     try:
         # Обработка плана помещения
@@ -123,7 +133,7 @@ if __name__ == "__main__":
 
         # Параметры моделирования
         MODEL_SCALE = 0.05 # 1 пиксель = 5 см
-        WALL_HEIGHT = 2.7  # Высота потолков 2.7 метра
+        WALL_HEIGHT = 20  # Высота потолков 2.7 метра
         WALL_THICKNESS = 0.3  # Толщина стен 20 см
 
         # Создание 3D-модели

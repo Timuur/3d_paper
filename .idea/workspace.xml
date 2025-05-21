@@ -4,9 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ab19be21-686b-48e6-94ed-00fa0fcf6674" name="Changes" comment="Находим Углы">
+    <list default="true" id="ab19be21-686b-48e6-94ed-00fa0fcf6674" name="Changes" comment="Сырой продукт">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/filter.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/img2wall.py" beforeDir="false" afterPath="$PROJECT_DIR$/img2wall.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
     </list>
@@ -104,7 +103,15 @@
       <option name="project" value="LOCAL" />
       <updated>1747220003076</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="Сырой продукт">
+      <option name="closed" value="true" />
+      <created>1747670810686</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1747670810686</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -133,6 +140,7 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="1" />
     <MESSAGE value="Находим Углы" />
-    <option name="LAST_COMMIT_MESSAGE" value="Находим Углы" />
+    <MESSAGE value="Сырой продукт" />
+    <option name="LAST_COMMIT_MESSAGE" value="Сырой продукт" />
   </component>
 </project>

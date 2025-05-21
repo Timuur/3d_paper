@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from random import randrange
+
+from decorator import append
 from tabulate import tabulate
 
 
@@ -149,7 +151,7 @@ def detect_and_draw_squar(image, output_image):
     if lines is not None:
         for line in lines:
             x1, y1, x2, y2 = line[0]
-            # cv2.line(output_image, (x1, y1), (x2, y2), (255, 255, 0), 2)
+            cv2.line(output_image, (x1, y1), (x2, y2), (255, 255, 0), 2)
     return lines
 
 def detect_corner(image, output_image):
@@ -162,7 +164,7 @@ def detect_corner(image, output_image):
     return corners
 
 
-def replace_gray_in_monochrome(image, lower_gray=50, upper_gray=210, target_value=255):
+def replace_gray_in_monochrome(image, lower_gray=50, upper_gray=230, target_value=255):
     """
     Заменяет диапазон серых пикселей в монохромном изображении на белые.
 
@@ -185,6 +187,7 @@ def process_floor_plan(image_path, border_size=10):
     :param border_size: Размер обрамляющей рамки
     :return: Контуры стен и исходные размеры изображения
     """
+    # _________________________________________________________________________________________
     # Загрузка изображения и предобработка
     original_image = cv2.imread(image_path)
 
@@ -214,11 +217,15 @@ def process_floor_plan(image_path, border_size=10):
 
     # Детекция и отрисовка линий
     # line1 = detect_and_draw_lines(cleaned_image, bordered_image)
-    # line2 = detect_and_draw_squar(cleaned_image, original_image)
-    # corner = detect_corner(cleaned_image, gray_image)
 
     processed_image = replace_gray_in_monochrome(cleaned_image)
     processed_image = replace_gray_in_monochrome(processed_image, 0, 10, 0)
+
+    # _________________________________________________________________________________________
+    corners = detect_corner(cleaned_image, bordered_image)
+
+    # line1 = detect_and_draw_lines(processed_image, original_image)
+    # line2 = detect_and_draw_squar(processed_image, original_image)
 
     # Поиск контуров
     contours, _ = cv2.findContours(processed_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -227,6 +234,10 @@ def process_floor_plan(image_path, border_size=10):
     filtered_contours = []
     border_margin = -10
     image_height, image_width = processed_image.shape
+    #_________________________________________________________________________________________
+
+
+    # _________________________________________________________________________________________
 
     for i, contour in enumerate(contours):
         # print(contour)
@@ -236,7 +247,7 @@ def process_floor_plan(image_path, border_size=10):
                 and (x + w) < (image_width - border_size - border_margin)
                 and (y + h) < (image_height - border_size - border_margin)):
             filtered_contours.append(contour)
-            cv2.drawContours(bordered_image, [contour], 0, (randrange(50,256), randrange(50, 256), randrange(50, 256)), 6)
+            cv2.drawContours(bordered_image, [contour], 0, (randrange(50,256), randrange(50, 256), randrange(50, 256)), 1)
         contour_points = contour.reshape(-1, 2)
 
         # Вывод таблицы для каждого контура
@@ -247,7 +258,7 @@ def process_floor_plan(image_path, border_size=10):
             tablefmt="grid",
             showindex="always"
         ))
-
+    # _________________________________________________________________________________________
     # Визуализация промежуточных результатов
     debug_images = [
         original_image,
@@ -268,7 +279,7 @@ def process_floor_plan(image_path, border_size=10):
         'Grayscale',
         'Binary Image',
         'Cleaned Image',
-        'Cleaned 1 Image'
+        'processed Image'
     ]
 
     plt.figure(figsize=(15, 10))
@@ -279,7 +290,7 @@ def process_floor_plan(image_path, border_size=10):
         plt.axis('off')
     plt.tight_layout()
     plt.show()
-
+    # _________________________________________________________________________________________
     #cv2.imwrite('output.png', cleaned_image)
 
     if not filtered_contours:
@@ -287,8 +298,6 @@ def process_floor_plan(image_path, border_size=10):
 
     # Корректировка координат контуров (удаление рамки)
     wall_contours = [cnt - border_size for cnt in filtered_contours]
-
-    # print(wall_contours)
 
     # return sorted_corner, (original_height, original_width)
     return wall_contours, (original_height, original_width)
