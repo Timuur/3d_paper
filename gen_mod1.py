@@ -13,6 +13,7 @@ def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0, esp = 0.
     :param esp: округление стен
     :return: Сцена с 3D-моделью (trimesh.Scene)
     """
+
     scene_objects = []
 
     for i, contour in enumerate(wall_contours):
@@ -21,7 +22,7 @@ def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0, esp = 0.
 
         # Упрощаем контур
         contour_cv = contour_points.reshape(-1, 1, 2).astype(np.int32)
-        epsilon = esp * cv2.arcLength(contour_cv, closed=True)
+        epsilon = float(esp) * cv2.arcLength(contour_cv, closed=True)
         approx = cv2.approxPolyDP(contour_cv, epsilon, closed=True)
         contour_points = approx.squeeze()
 
@@ -31,7 +32,7 @@ def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0, esp = 0.
             continue
 
         # Масштабируем координаты
-        scaled = contour_points * scale
+        scaled = contour_points * float(scale)
 
         # Замыкаем контур при необходимости
         if not np.allclose(scaled[0], scaled[-1]):

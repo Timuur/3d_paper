@@ -6,7 +6,6 @@ from scipy.spatial import distance
 
 from tabulate import tabulate
 
-
 def sotr_cor(ar_cor, out_img):
     lines = []
     line = []
