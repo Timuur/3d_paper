@@ -344,7 +344,7 @@ def process_floor_plan(image_path, border_size=10):
         plt.title(title)
         plt.axis('off')
     plt.tight_layout()
-    plt.show()
+    # plt.show()
     # _________________________________________________________________________________________
     #cv2.imwrite('output.png', cleaned_image)
 
