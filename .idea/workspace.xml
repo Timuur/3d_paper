@@ -5,7 +5,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ab19be21-686b-48e6-94ed-00fa0fcf6674" name="Changes" comment="Сырой продукт">
-      <change afterPath="$PROJECT_DIR$/window.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/gen_mod1.py" beforeDir="false" afterPath="$PROJECT_DIR$/gen_mod1.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/img2wall.py" beforeDir="false" afterPath="$PROJECT_DIR$/img2wall.py" afterDir="false" />
@@ -44,19 +43,20 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python.corner.executor": "Run",
-    "Python.corner2.executor": "Run",
-    "Python.filter.executor": "Run",
-    "Python.img2wall.executor": "Run",
-    "Python.main.executor": "Run",
-    "Python.proc.executor": "Run",
-    "Python.window.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "master"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.corner.executor&quot;: &quot;Run&quot;,
+    &quot;Python.corner2.executor&quot;: &quot;Run&quot;,
+    &quot;Python.filter.executor&quot;: &quot;Run&quot;,
+    &quot;Python.img2wall.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.proc.executor&quot;: &quot;Run&quot;,
+    &quot;Python.svg2png.executor&quot;: &quot;Run&quot;,
+    &quot;Python.window.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;
   }
-}]]></component>
+}</component>
   <component name="RunManager">
     <configuration name="main" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <module name="Pract_Prog_F" />

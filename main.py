@@ -1,23 +1,24 @@
 from tkinter import *
 from tkinter import ttk, filedialog
 from PIL import ImageTk, Image
-
-import tempfile, base64, zlib
+from io import BytesIO
 
 #______________________________________________________________________________________________________________________
-ICON = zlib.decompress(base64.b64decode("eJxjYGAEQgEBBiDJwZDBysAgxsDAoAHEQCEGBQaIOAg4sDIgACMUj4JRMApGwQgF/ykEAFXxQRc="))
-_, ICON_PATH = tempfile.mkstemp()
-with open(ICON_PATH, "wb") as icon_file:
-    icon_file.write(ICON)
-
-file_t = [("PNG Files", "*.png"), ("JPG Files", "*.jpg"), ("JPEG Files", "*.jpeg")]
+# ICON = zlib.decompress(base64.b64decode("eJxjYGAEQgEBBiDJwZDBysAgxsDAoAHEQCEGBQaIOAg4sDIgACMUj4JRMApGwQgF/ykEAFXxQRc="))
+# _, ICON_PATH = tempfile.mkstemp()
+# with open(ICON_PATH, "wb") as icon_file:
+#     icon_file.write(ICON)
+#
+file_t = [("JPG Files", "*.jpg"), ("PNG Files", "*.png"), ("JPEG Files", "*.jpeg"), ("SVG Files", "*.svg")]
 
 
 #______________________________________________________________________________________________________________________
 root = Tk()
 root.title("План в модель")
 root.geometry("950x700")
-root.iconbitmap(default=ICON_PATH)
+
+# root.iconbitmap(default=ICON_PATH)
+
 def finish():
     root.destroy()  # ручное закрытие окна и всего приложения
     print("Закрытие приложения")
@@ -75,16 +76,16 @@ def click():
 
         # Визуализация результата
         scene1.show()
-        filename = filedialog.asksaveasfilename()
-        # Экспорт модели (опционально)
-        scene1.export(filename)
+        # filename = filedialog.asksaveasfilename()
+        # # Экспорт модели (опционально)
+        # scene1.export(filename)
 
     except FileNotFoundError as e:
         print(f"Ошибка загрузки файла: {e}")
-    except ValueError as e:
-        print(f"Ошибка обработки данных: {e}")
-    except Exception as e:
-        print(f"Неизвестная ошибка: {e}")
+    # except ValueError as e:
+    #     print(f"Ошибка обработки данных: {e}")
+    # except Exception as e:
+    #     print(f"Неизвестная ошибка: {e}")
 
 #______________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________
