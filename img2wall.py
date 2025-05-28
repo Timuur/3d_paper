@@ -43,196 +43,61 @@ def average_close_points(points, threshold=2):
 
     return averaged_points
 
-def average_close_points_X(points, threshold=2):
+def average_close2points(points, threshold=2):
     """
-    Усредняет близкие точки в массиве кортежей (x, y).
-    Точки считаются близкими, если расстояние между ними <= threshold.
-    Возвращает список усредненных точек.
+    Усредняет близкие точки в списке numpy-массивов.
+    Работает с массивами вида (N, 1, 2) или (N, 2).
     """
-    n = len(points)
+    points = [arr.copy() for arr in points]  # Копируем, чтобы не менять исходные данные
 
-    for i in range(n - 1):
-        x1, y1 = points[i]
-        x2, y2 = points[i + 1]
+    for i in range(len(points)):
+        for j in range(len(points[i])):
+            # Получаем координаты точки, учитывая возможную структуру массива
+            if points[i][j].ndim == 2:  # Если массив вида [[x, y]]
+                x1, y1 = points[i][j][0]
+            else:  # Если массив вида [x, y] или просто скаляр (но в вашем случае это массив)
+                x1, y1 = points[i][j].ravel()
 
-        dx = abs(x2 - x1)
-        dy = abs(y2 - y1)
+            # Сравниваем со всеми остальными точками
+            for k in range(i, len(points)):
+                for l in range(j + 1 if k == i else 0, len(points[k])):
+                    # Аналогично получаем x2, y2
+                    if points[k][l].ndim == 2:
+                        x2, y2 = points[k][l][0]
+                    else:
+                        x2, y2 = points[k][l].ravel()
 
-        # Усредняем X, если разница в пределах порога
-        if dx <= threshold:
-            avg_x = (x1 + x2 + 1) // 2
-            points[i][0] = avg_x
-            points[i + 1][0] = avg_x
+                    # Если точки близки, усредняем их
+                    if abs(x1 - x2) <= threshold:
+                        avg_x = (x1 + x2) // 2
 
-        # Усредняем Y, если разница в пределах порога
-        if dy <= threshold:
-            avg_y = (y1 + y2 + 1) // 2
-            points[i][1] = avg_y
-            points[i + 1][1] = avg_y
+                        # Обновляем координаты, сохраняя структуру массива
+                        if points[i][j].ndim == 2:
+                            points[i][j][0][0] = avg_x
+                        else:
+                            points[i][j][:][0] = avg_x
 
+                        if points[k][l].ndim == 2:
+                            points[k][l][0][0] = avg_x
+                        else:
+                            points[k][l][:][0] = avg_x
+                    # Если точки близки, усредняем их
+                    if abs(y1 - y2) <= threshold:
+                        avg_y = (y1 + y2) // 2
+
+                        # Обновляем координаты, сохраняя структуру массива
+                        if points[i][j].ndim == 2:
+                            points[i][j][0][1] = avg_y
+                        else:
+                            points[i][j][:][1] = avg_y
+
+                        if points[k][l].ndim == 2:
+                            points[k][l][0][1] = avg_y
+                        else:
+                            points[k][l][:][1] = avg_y
     return points
 
-def average_close_points_XX(points, threshold=2):
-    """
-    Усредняет близкие точки в массиве кортежей (x, y).
-    Точки считаются близкими, если расстояние между ними <= threshold.
-    Возвращает список усредненных точек.
-    """
-    n = len(points)
-    # visited = [] * n
-    for i in range(n-1):
-        # x1, y1 = points[i].ravel()
-        # x2, y2 = points[i+1].ravel()
-        n1 = len(points[i])
-        # visited[i] = [False] * n1
-        n2 = len(points[(i + 1) % n])
-        for j in range(n1-1):
-            x1, y1 = points[i][j].ravel()
-            for j1 in range(n2 - 1):
-                x2, y2 = points[(i + 1) % n][j1].ravel()
-
-                dx = abs(x2 - x1)
-                dy = abs(y2 - y1)
-
-                # Усредняем X, если разница в пределах порога
-                if dx <= threshold:
-                    avg_x = (x1 + x2 + 1) // 2
-                    points[i][j] = avg_x, y1
-                    points[(i + 1) % n][j1]= avg_x, y2
-
-                # Усредняем Y, если разница в пределах порога
-                if dy <= threshold:
-                    avg_y = (y1 + y2 + 1) // 2
-                    points[i][j] = x1, avg_y
-                    points[(i + 1) % n][j1] = x2, avg_y
-
-    return points
-
-# def average_close_coordinates_for_array(
-#     contours: list[cv2.Mat | np.ndarray],
-#     threshold: int = 1,
-#     count: int = 1
-# ) -> list[np.ndarray]:
-#     """
-#     Обрабатывает последовательность контуров (cv2.Mat или np.ndarray),
-#     усредняя близкие координаты X и Y для каждой точки всех контуров.
-#
-#     Параметры:
-#         contours: Список контуров в формате (N, 1, 2) или (N, 2).
-#         threshold: Максимальная разница для усреднения координат.
-#
-#     Возвращает:
-#         Список контуров в формате np.ndarray с обновленными координатами.
-#     """
-#     processed_contours = []
-#     for contour in contours:
-#         contour_array = np.array(contour) if isinstance(contour, cv2.Mat) else contour
-#         original_dtype = contour_array.dtype  # Сохраняем исходный тип данных
-#
-#         # Извлекаем точки и преобразуем в список кортежей
-#         points = contour_array.reshape(-1, 2)
-#         tuple_points = [tuple(map(int, p)) for p in points]  # Гарантируем целые числа
-#
-#         # Усреднение координат (обновленная функция)
-#         smoothed_points = _average_close_coordinates(tuple_points, threshold,count)
-#
-#         # Преобразуем обратно в исходный формат и тип данных
-#         reshaped_points = np.array(smoothed_points, dtype=original_dtype)
-#         if contour_array.ndim == 3:
-#             reshaped_points = reshaped_points.reshape(-1, 1, 2)
-#         processed_contours.append(reshaped_points)
-#     return processed_contours
-#
-# def _average_close_coordinates(
-#         points: list[tuple[int, int]],
-#         threshold: int,
-#         count: int
-# ) -> list[tuple[int, int]]:
-#     points_list = [list(p) for p in points]  # Работаем с изменяемым списком
-#
-#     # Кластеризация по X и Y отдельно
-#     def cluster_and_average(coord_idx: int):
-#         parent = list(range(len(points_list)))
-#
-#         def find(u):
-#             while parent[u] != u:
-#                 parent[u] = parent[parent[u]]
-#                 u = parent[u]
-#             return u
-#
-#         # Объединяем точки с близкими координатами
-#         for i in range(len(points_list)):
-#             for j in range(i + 1, len(points_list)):
-#                 if abs(points_list[i][coord_idx] - points_list[j][coord_idx]) <= threshold:
-#                     root_i, root_j = find(i), find(j)
-#                     if root_i != root_j:
-#                         parent[root_j] = root_i
-#
-#         # Усредняем координаты в кластерах
-#         clusters = {}
-#         for idx in range(len(points_list)):
-#             root = find(idx)
-#             clusters.setdefault(root, []).append(idx)
-#
-#         for cluster in clusters.values():
-#             if len(cluster) > 1:
-#                 avg = round(sum(points_list[i][coord_idx] for i in cluster) / len(cluster))
-#                 for i in cluster:
-#                     points_list[i][coord_idx] = int(avg)  # Гарантируем целое число
-#
-#     # Обрабатываем X (0) и Y (1)
-#     for u in range(count):
-#         cluster_and_average(0)
-#         cluster_and_average(1)
-#
-#     return [tuple(p) for p in points_list]
-
-
-# def average_cls_points_x(contour: Sequence[cv2.Mat | np.ndarray], threshold=2):
-#     # Ensure the input is a NumPy array
-#     # contour = np.asarray(contour)
-#     # original_shape = contour.shape
-#     contour_reshaped = contour.reshape(-1, 2)
-#     # contour_list = contour_reshaped.tolist()
-#     n = len(contour_reshaped)
-#
-#     def process_coordinate(coord_idx):
-#         parent = list(range(n))
-#
-#         def find(u):
-#             while parent[u] != u:
-#                 parent[u] = parent[parent[u]]  # Path compression
-#                 u = parent[u]
-#             return u
-#
-#         # Group indices with coordinates within the threshold
-#         for i in range(n):
-#             for j in range(i + 1, n):
-#                 if abs(contour_reshaped[i][coord_idx] - contour_reshaped[j][coord_idx]) <= threshold:
-#                     root_i = find(i)
-#                     root_j = find(j)
-#                     if root_i != root_j:
-#                         parent[root_j] = root_i  # Union
-#
-#         # Compute averages for each cluster
-#         clusters = {}
-#         for i in range(n):
-#             root = find(i)
-#             clusters.setdefault(root, []).append(i)
-#
-#         for indices in clusters.values():
-#             if len(indices) > 1:
-#                 avg = round(sum(contour_reshaped[i][coord_idx] for i in indices) / len(indices))
-#                 for i in indices:
-#                     contour_reshaped[i][coord_idx] = avg
-#
-#     # Process X and Y coordinates
-#     process_coordinate(0)  # X-axis
-#     process_coordinate(1)  # Y-axis
-#
-#     # Convert back to original shape
-#     processed_contour = np.array(contour_reshaped, dtype=np.int32)
-#     return processed_contour
+#_______________________________________________________________________________________________________________________
 
 def add_white_border(image, border_size=20):
     """
@@ -263,80 +128,7 @@ def apply_adaptive_threshold(gray_image):
         2  # Константа для вычитания
     )
 
-# def detect_walls_by_color(image):
-#     """
-#     Создает маску для стен на основе цветового диапазона в HSV
-#     :param image: Входное изображение BGR
-#     :return: Бинарная маска стен
-#     """
-#     hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-#
-#     # Диапазон цветов для стен (настройте под ваш случай)
-#     lower_color = np.array([11, 146, 0])
-#     upper_color = np.array([255, 255, 255])
-#
-#     return cv2.inRange(hsv_image, lower_color, upper_color)
-#
-# def detect_and_draw_lines(image, output_image):
-#     """
-#     Обнаруживает и рисует линии на изображении
-#     :param image: Исходное изображение для обработки
-#     :param output_image: Изображение для визуализации результатов
-#     """
-#     # Детектирование краев
-#     edges = cv2.Canny(image, 50, 150)
-#
-#     # Параметры детекции линий:
-#     lines = cv2.HoughLinesP(
-#         edges,
-#         1,  # Разрешение rho (пиксели)
-#         np.pi / 150,  # Разрешение theta (радианы)
-#         threshold=10,  # Минимальное количество пересечений
-#         minLineLength=5,  # Минимальная длина линии
-#         maxLineGap=1  # Максимальный разрыв между линиями
-#     )
-#
-#     # Отрисовка линий
-#     if lines is not None:
-#         for line in lines:
-#             x1, y1, x2, y2 = line[0]
-#             # cv2.line(output_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
-#     return lines
-#
-# def detect_and_draw_squar(image, output_image):
-#     """
-#     Обнаруживает и рисует линии на изображении
-#     :param image: Исходное изображение для обработки
-#     :param output_image: Изображение для визуализации результатов
-#     """
-#     # Детектирование краев
-#     edges = cv2.Canny(image, 50, 150)
-#
-#     # Параметры детекции линий:
-#     lines = cv2.HoughLinesP(
-#         edges,
-#         1,  # Разрешение rho (пиксели)
-#         np.pi / 160,  # Разрешение theta (радианы)
-#         threshold=20,  # Минимальное количество пересечений
-#         minLineLength=5,  # Минимальная длина линии
-#         maxLineGap=1  # Максимальный разрыв между линиями
-#     )
-#
-#     # Отрисовка линий
-#     if lines is not None:
-#         for line in lines:
-#             x1, y1, x2, y2 = line[0]
-#             cv2.line(output_image, (x1, y1), (x2, y2), (255, 255, 0), 2)
-#     return lines
-
-# def detect_corner(image, output_image):
-#     corners = cv2.goodFeaturesToTrack(image, 900, .06, 2)
-#     corners = np.intp(corners)
-#
-#     for i in corners:
-#         x, y = i.ravel()
-#         cv2.circle(output_image, (x, y), 1, (0, 0, 255), -1)  # Используем красный цвет (в RGB)
-#     return corners
+#______________________________________________________________________________________________________________________
 
 def replace_gray_in_monochrome(image, lower_gray=39, upper_gray=255, target_value=255):
     """
@@ -375,12 +167,6 @@ def process_floor_plan(image_path, border_size=10):
     # Добавление белой рамки для обработки краев
     bordered_image = add_white_border(original_image, border_size)
 
-    # Сегментация стен по цвету
-    # wall_mask = detect_walls_by_color(bordered_image)
-
-    # Преобразование маски в 3-канальное изображение
-    # wall_mask_bgr = cv2.cvtColor(wall_mask, cv2.COLOR_GRAY2BGR)
-
     # Бинаризация с адаптивным порогом
     gray_image = cv2.cvtColor(bordered_image, cv2.COLOR_BGR2GRAY)
     binary_image = apply_adaptive_threshold(gray_image)
@@ -389,17 +175,10 @@ def process_floor_plan(image_path, border_size=10):
     kernel = np.ones((10, 10), np.uint8)
     cleaned_image = cv2.morphologyEx(gray_image, cv2.MORPH_CLOSE, kernel, iterations=2)
 
-    # Детекция и отрисовка линий
-    # line1 = detect_and_draw_lines(cleaned_image, bordered_image)
-
     processed_image = replace_gray_in_monochrome(cleaned_image, 35, 255, 255)
     processed_image = replace_gray_in_monochrome(processed_image, 0, 34, 0)
 
     # _________________________________________________________________________________________
-    # corners = detect_corner(cleaned_image, bordered_image)
-
-    # line1 = detect_and_draw_lines(processed_image, original_image)
-    # line2 = detect_and_draw_squar(processed_image, original_image)
 
     # Поиск контуров
     contours, _ = cv2.findContours(processed_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -409,74 +188,20 @@ def process_floor_plan(image_path, border_size=10):
     border_margin = -10
     image_height, image_width = processed_image.shape
 
-    # contours = average_close_coordinates_for_array(contours, 4, 4)
-
-    # contours = average_close_coordinates_for_array(contours, 2)
-
-    #_________________________________________________________________________________________
-    # print(corners)
-    #
+    # print(f"\nКонтур #no abs:")
     # print(contours)
-    #
-    # # Исходные данные (пример)
-    # first_array = np.array(corners)  # Первый массив точек
-    # sub_arrays = contours  # Кортеж подмассивов из второго массива
-    #
-    # all_second_points = []
-    # for i, sub in enumerate(sub_arrays):
-    #     for point in sub:
-    #         x1, y1, _, _ = cv2.boundingRect(point)  # Доступ к координатам через [0][0] и [0][1]
-    #         all_second_points.append((x1, y1, i, sub))
-    #
-    # # Корректное создание множеств для сравнения
-    # first_points_set = set((p[0][0], p[0][1]) for p in first_array)
-    # second_points_set = set((x, y) for x, y, _, _ in all_second_points)
-    #
-    # # Поиск отсутствующих точек с сохранением 3D-структуры
-    # missing_points = [np.array([[[x, y]]]) for x, y in first_points_set
-    #                   if (x, y) not in second_points_set]
-    #
-    # # Функция поиска ближайшей точки
-    # def find_closest(target, points):
-    #     min_dist = float('inf')
-    #     closest = None
-    #     for p in points:
-    #         d = distance.euclidean(target, (p[0], p[1]))
-    #         if d < min_dist:
-    #             min_dist = d
-    #             closest = p
-    #     return closest
-    #
-    # # Вставка точек с учётом 3D-структуры
-    # for mp in missing_points:
-    #     x_val, y_val = mp[0][0][0], mp[0][0][1]  # Доступ через три уровня индексов
-    #     closest_info = find_closest((x_val, y_val), all_second_points)
-    #
-    #     if closest_info:
-    #         closest_x, closest_y, sub_idx, sub = closest_info
-    #         # Поиск позиции с учётом 3D-структуры
-    #         position = np.where((sub == [[[closest_x, closest_y]]]).all(axis=2))[0][0]
-    #
-    #         # Создание новой точки с правильной размерностью (1,1,2)
-    #         new_point = np.array([[[x_val, y_val]]], dtype=sub.dtype)
-    #
-    #         # Вставка с сохранением размерности
-    #         updated_sub = np.insert(sub, position + 1, new_point, axis=0)
-    #
-    #         # Обновление подмассивов
-    #         sub_arrays = list(sub_arrays)
-    #         sub_arrays[sub_idx] = updated_sub
-    #         sub_arrays = tuple(sub_arrays)
-    #
-    # print(sub_arrays)
-    # contours = sub_arrays
+    # print("________________________________________________________________________")
+
+    contours = average_close2points(contours, 4)
+    # contours = average_close2points(contours, 3)
+    # print(f"\nКонтур #abs:")
+    # print(contours)
+    # print("________________________________________________________________________")
+
     # _________________________________________________________________________________________
 
     for i, contour in enumerate(contours):
         contour = np.array( average_close_points(   contour.reshape(-1, 2), 3))
-        contour = np.array( average_close_points_X(   contour.reshape(-1, 2), 4))
-        # contour = np.array( average_close_points_X(   contour.reshape(-1, 2), 2))
-        # contour = np.array( average_close_points_X(   contour.reshape(-1, 2), 1))
         # print(contour)
         x, y, w, h = cv2.boundingRect(contour)
         if (x > border_size + border_margin
@@ -487,26 +212,21 @@ def process_floor_plan(image_path, border_size=10):
             cv2.drawContours(bordered_image, [contour], 0, (randrange(50,256), randrange(50, 256), randrange(50, 256)), 1)
         contour_points = contour.reshape(-1, 2)
 
-        # Вывод таблицы для каждого контура
-        print(f"\nКонтур #{i + 1}:")
-        print(tabulate(
-            contour_points,
-            headers=['X', 'Y'],
-            tablefmt="grid",
-            showindex="always"
-        ))
+    #     # Вывод таблицы для каждого контура
+    #     print(f"\nКонтур #{i + 1}:")
+    #     print(tabulate(
+    #         contour_points,
+    #         headers=['X', 'Y'],
+    #         tablefmt="grid",
+    #         showindex="always"
+    #     ))
+    # print("________________________________________________________________________")
+    #
+    # print(f"\nКонтур #abs:")
+    # print(filtered_contours)
+    # print("________________________________________________________________________")
+    # print("________________________________________________________________________")
 
-        # contour_points = average_close_points_X(contour_points, 4)
-        # contour_points = average_close_points_X(contour_points, 2)
-        # contour_points = average_close_points_X(contour_points, 1)
-        # # Вывод таблицы для каждого контура
-        # print(f"\nКонтур #{i + 1}:")
-        # print(tabulate(
-        #     contour_points,
-        #     headers=['X', 'Y'],
-        #     tablefmt="grid",
-        #     showindex="always"
-        # ))
     # _________________________________________________________________________________________
     # Визуализация промежуточных результатов
     debug_images = [
@@ -538,7 +258,7 @@ def process_floor_plan(image_path, border_size=10):
         plt.title(title)
         plt.axis('off')
     plt.tight_layout()
-    plt.show()
+    # plt.show()
     # _________________________________________________________________________________________
     #cv2.imwrite('output.png', cleaned_image)
 

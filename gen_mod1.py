@@ -3,7 +3,7 @@ import numpy as np
 import trimesh
 from tabulate import tabulate
 
-def build_door(wall1, wall2):
+def build_door(wall1, wall2, scale):
     box = []
     for i1, point1 in enumerate(wall1):
         x1,y1 = point1.ravel()
@@ -19,6 +19,29 @@ def build_door(wall1, wall2):
                     print(f"Точка {i1} =[{x1, y1}] b Точка{i2} =[{x2, y2 }]: длина стены = {wall_length:.2f} м")
                     box.append(point1)
                     box.append(point2)
+    # # Масштабируем координаты
+    # scaled = box * float(scale)
+    #
+    # # Замыкаем контур при необходимости
+    # if not np.allclose(scaled[0], scaled[-1]):
+    #     scaled = np.vstack([scaled, scaled[0]])
+    #
+    # try:
+    #     # Создаём 2D полигон
+    #     polygon = trimesh.path.polygons.Polygon(scaled)
+    #
+    #     # Экструдируем в 3D
+    #     mesh = trimesh.creation.extrude_polygon(polygon, height=height)
+    #     mesh.apply_transform(matrix_z_inversion)
+    #
+    #     # Добавляем в сцену
+    #     scene_objects.append(mesh)
+    #
+    #     print(f"Контур #{i + 1} успешно преобразован в 3D-объект")
+    #
+    # except Exception as e:
+    #     print(f"Ошибка обработки контура #{i + 1}: {str(e)}")
+    #     continue
 
     print("door")
     print(box)
@@ -56,7 +79,7 @@ def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0, esp = 0.
 
         next_wall = wall_contours[(i + 1) % len(wall_contours)]
 
-        build_door(wall_contours[i], next_wall)
+        build_door(wall_contours[i], next_wall, scale)
 
         # Масштабируем координаты
         scaled = contour_points * float(scale)
