@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from random import randrange
 
+import check_img_ai
+
 from tabulate import tabulate
 
 def average_close_points(points, threshold=2):
@@ -188,6 +190,8 @@ def process_floor_plan(image_path, border_size=10):
     border_margin = -10
     image_height, image_width = processed_image.shape
 
+
+
     # print(f"\nКонтур #no abs:")
     # print(contours)
     # print("________________________________________________________________________")
@@ -195,14 +199,40 @@ def process_floor_plan(image_path, border_size=10):
     contours = average_close2points(contours, 4)
     # contours = average_close2points(contours, 3)
     # print(f"\nКонтур #abs:")
-    # print(contours)
+    print(contours)
     # print("________________________________________________________________________")
+
+    detections, labels = check_img_ai.get_coord(image_path)
+    for i in range(len(detections)):
+        # Get bounding box coordinates
+        # Ultralytics returns results in Tensor format, which have to be converted to a regular Python array
+        xyxy_tensor = detections[i].xyxy.cpu()  # Detections in Tensor format in CPU memory
+        xyxy = xyxy_tensor.numpy().squeeze()  # Convert tensors to Numpy array
+        xmin, ymin, xmax, ymax = xyxy.astype(int)  # Extract individual coordinates and convert to int
+        xy1 = xmin + border_size, ymin+ border_size
+        xy2 = xmin+ border_size, ymax+ border_size
+        xy4 = xmax+ border_size, ymin+ border_size
+        xy3 = xmax+ border_size, ymax+ border_size
+        xyy = xy1,xy2,xy3,xy4
+        print(xyy)
+        contours.append(np.array(xyy))
+        # Get bounding box class ID and name
+        classidx = int(detections[i].cls.item())
+        classname = labels[classidx]
+
+        # Get bounding box confidence
+        conf = detections[i].conf.item()
+
+        # Draw box if confidence threshold is high enough
+        # if conf > 0.5:
+        # Draw box around object
+        cv2.rectangle(cleaned_image, (xmin, ymin), (xmax, ymax), (randrange(0,256), randrange(0, 256), randrange(50, 256)), 2)
 
     # _________________________________________________________________________________________
 
     for i, contour in enumerate(contours):
-        contour = np.array( average_close_points(   contour.reshape(-1, 2), 3))
-        # print(contour)
+        contour = np.array( average_close_points(   contour.reshape(-1, 2), 1))
+        # print(contour)\
         x, y, w, h = cv2.boundingRect(contour)
         if (x > border_size + border_margin
                 and y > border_size + border_margin
@@ -258,7 +288,7 @@ def process_floor_plan(image_path, border_size=10):
         plt.title(title)
         plt.axis('off')
     plt.tight_layout()
-    # plt.show()
+    plt.show()
     # _________________________________________________________________________________________
     #cv2.imwrite('output.png', cleaned_image)
 
