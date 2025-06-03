@@ -44,7 +44,8 @@ def click():
 
     try:
         # Обработка плана помещения
-        wall_contours, image_size = i2w.process_floor_plan(plan)
+        (wall_contours, image_size, filtered_contours_door, filtered_contours_window,
+         filtered_contours_box, filtered_contours_toilet) = i2w.process_floor_plan(plan)
 
         # Параметры моделирования
         # model_scale = 0.05 # 1 пиксель = 5 см
@@ -74,7 +75,10 @@ def click():
             esp
         )
 
+        scene1.add_geometry(gm1.build_door(filtered_contours_door, model_scale))
+
         # Визуализация результата
+        # scene1.add_geometry()
         scene1.show()
         # filename = filedialog.asksaveasfilename()
         # # Экспорт модели (опционально)
