@@ -197,9 +197,9 @@ def process_floor_plan(image_path, border_size=20):
     # print("________________________________________________________________________")
 
     contours = average_close2points(contours, 4)
-    # contours = average_close2points(contours, 3)
+    contours = average_close2points(contours, 2)
     # print(f"\nКонтур #abs:")
-    print(contours)
+    # print(contours)
     # print("________________________________________________________________________")
 
     door = []
@@ -302,7 +302,7 @@ def process_floor_plan(image_path, border_size=20):
             #                  (randrange(50, 256), randrange(50, 256), randrange(50, 256)), 1)
 
     for i, contour in enumerate(contours):
-        contour = np.array( average_close_points(   contour.reshape(-1, 2), 1))
+        contour = np.array( average_close_points(   contour.reshape(-1, 2), 3))
         # print(contour)\
         x, y, w, h = cv2.boundingRect(contour)
         if (x > border_size + border_margin
@@ -323,10 +323,10 @@ def process_floor_plan(image_path, border_size=20):
     #     ))
     # print("________________________________________________________________________")
     #
-    # print(f"\nКонтур #abs:")
-    # print(filtered_contours)
-    # print("________________________________________________________________________")
-    # print("________________________________________________________________________")
+    print(f"\nКонтур #abs:")
+    print(filtered_contours)
+    print("________________________________________________________________________")
+    print("________________________________________________________________________")
 
     # _________________________________________________________________________________________
     # Визуализация промежуточных результатов

@@ -6,7 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="ab19be21-686b-48e6-94ed-00fa0fcf6674" name="Changes" comment="Сырой продукт">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/check_img_ai.py" beforeDir="false" afterPath="$PROJECT_DIR$/check_img_ai.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/gen_mod1.py" beforeDir="false" afterPath="$PROJECT_DIR$/gen_mod1.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/img2wall.py" beforeDir="false" afterPath="$PROJECT_DIR$/img2wall.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
