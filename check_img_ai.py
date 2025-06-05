@@ -89,7 +89,7 @@ import cv2
 def get_coord(img):
     # Define path to model and other user variables
     model_path = 'G:\\Pract_Prog\\my_model (1)\\my_model.pt'  # Path to model
-    min_thresh = 0.50  # Minimum detection threshold
+    # min_thresh = 0.50  # Minimum detection threshold
 
     # Check if model file exists and is valid
     if (not os.path.exists(model_path)):

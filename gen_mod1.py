@@ -1,14 +1,12 @@
-import cv2
 import numpy as np
 import trimesh
-from tabulate import tabulate
 import img2wall as i2w
 from scipy.spatial import ConvexHull
-from trimesh.transformations import (rotation_matrix,scale_matrix,
-                                     concatenate_matrices)
+from trimesh.transformations import rotation_matrix, concatenate_matrices
 from shapely.geometry import Polygon
 
 mesh_door = trimesh.load('Door_Component.obj')
+mesh_window = trimesh.load('window1.obj')
 
 def gen_floor(objects):
 
@@ -31,12 +29,143 @@ def gen_floor(objects):
     # Создаем сцену
     return floor
 
-def build_door(wall_contours, scale):
+# def check_door(wall1, wall2):
+#     box = []
+#     for i1, point1 in enumerate(wall1):
+#         x1,y1 = point1.ravel()
+#         for i2, point2 in enumerate(wall2):
+#             x2, y2 = point2.ravel()
+#             wall_length = np.linalg.norm(point1 - point2)
+#             if ((x1 == x2) or (x1 == x2 -1) or (x1 == x2+1)) and 150.0<abs(wall_length)<220.0:
+#                 # print(f"Точка {i1} =[{x1, y1}] b Точка{i2} =[{x2, y2}]: длина стены = {wall_length:.2f} м")
+#                 box.append(point1)
+#                 box.append(point2)
+#                 # print(point2)
+#                 # print(point1)
+#             else:
+#                 if ((y1 == y2) or (y1 == y2 -1) or (y1 == y2+1)) and 150.0<abs(wall_length)<220.0:
+#                     # print(f"Точка {i1} =[{x1, y1}] b Точка{i2} =[{x2, y2 }]: длина стены = {wall_length:.2f} м")
+#                     box.append(point1)
+#                     box.append(point2)
+#                     # print(point2)
+#                     # print(point1)
+#     # print("door")
+#     # print(box)
+#     return box
+
+
+def build_door(door_contours, wall_contours, scale, height = 2.7):
     scene_objects = []
-    for i, contour in enumerate(wall_contours):
+    for i, contour in enumerate(door_contours):
         mesh = mesh_door.copy()
         wight_d = contour[2][0] - contour[0][0]
         hight_d = contour[1][1] - contour[0][1]
+
+        # ppoint = contour[0]
+        # p_ch = False
+        # for i1, contur in enumerate(wall_contours):
+        #     next_wall = wall_contours[(i1+1) % len(wall_contours)]
+            # box_door = check_door(contur, next_wall)
+            # for p, ponit in enumerate(box_door):
+            #     for op in range(4):
+            #         if abs(ponit[0] - contour[op][0]) < 8:
+            #             # print(                            f"Точка {p} =[{ponit[0], ponit[1]}] b Точка{i1} =[{contour[op][0], contour[op][1]}] - близки X")
+            #             # contour[op][0] = ponit[0]
+            #             ppoint = ponit
+            #             p_ch = True
+            #         if abs(ponit[1] - contour[op][1]) < 8:
+            #             # print(                            f"Точка {p} =[{ponit[0], ponit[1]}] b Точка{i1} =[{contour[op][0], contour[op][1]}] - близки Y")
+            #             # contour[op][1] = ponit[1]
+            #             ppoint = ponit
+            #             p_ch = True
+
+        contour = i2w.average_close_points(contour, 300)
+        contour = np.column_stack((contour, np.zeros(len(contour))))
+
+        # Преобразуем контур в массив точек
+        contour_points = np.array(contour[0])
+        # print(contour_points)
+        # print(ppoint)
+
+        # Масштабируем координаты
+        scaled = contour_points * float(scale)
+        # ppoint_s = ppoint * float(scale)
+        # print(scaled)
+        # print(ppoint_s)
+        # if wight_d > hight_d and p_ch:
+        #     scaled = scaled[0], ppoint_s[1], scaled[2]
+        # if wight_d < hight_d and p_ch:
+        #     scaled = ppoint_s[0], scaled[1], scaled[2]
+        # print(scaled)
+        # print(scaled[0])
+        # print(translation_matrix(scaled))
+
+        matrix_z_inversion = np.array([
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, -1, 0],
+            [0, 0, 0, 1]
+        ])
+
+        try:
+            matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), 0  # Устанавливаем смещение
+            # matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1] + (hight_d * float(scale))/2), 0  # Устанавливаем смещение
+            # Создаём 2D полигон
+            mesh.apply_scale(8)
+            hight_win = mesh.extents.tolist()
+            if wight_d > hight_d:
+                scale_win = wight_d*float(scale) / hight_win[0]
+                # print("wight_d = ", wight_d*float(scale))
+            else:
+                scale_win = hight_d*float(scale) / hight_win[0]
+                # print("hight_d = ", hight_d*float(scale))
+            # print(hight_win)
+            # print(scale_win)
+            mesh.apply_scale([scale_win, 1, 1])
+            rot = rotation_matrix(np.pi / 2, [-1, 0, 0])
+            transform = concatenate_matrices(matrix_z_inversion, rot)
+            mesh.apply_transform(transform)
+            # print(transform)
+            if wight_d < hight_d:
+                # 1. Находим его центр (bounding box центроид)
+                center = mesh.bounding_box.centroid
+
+                # 2. Переносим в начало координат
+                mesh.apply_translation(-center)
+
+                # 3. Поворачиваем (например, на 45° вокруг оси Z)
+                rotation = rotation_matrix(np.pi / 2, [0, 0, 1])  # Ось Z
+                mesh.apply_transform(rotation)
+
+                # 4. Возвращаем на исходную позицию
+                mesh.apply_translation(center)
+
+            hight_door = mesh.extents.tolist()
+            # print(hight_door)
+            h_d_p = float(height) - hight_door[2]
+            box = trimesh.primitives.Box(extents=[hight_door[0], hight_door[1], h_d_p])
+            matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), float(height) - h_d_p/2 # Устанавливаем смещение
+
+            box.apply_transform(matrix_z_inversion)
+
+            # Добавляем в сцену
+            scene_objects.append(mesh)
+            scene_objects.append(box)
+
+            print(f"Контур DOOR #{i + 1} успешно преобразован в 3D-объект")
+
+        except Exception as e:
+            print(f"Ошибка обработки контура DOOR #{i + 1}: {str(e)}")
+            continue
+    return scene_objects
+
+def build_window(window_position, wall_contours, scale, height = 2.7):
+    scene_objects = []
+    for i, contour in enumerate(window_position):
+        win_mesh = mesh_window.copy()
+        wight_d = contour[2][0] - contour[0][0]
+        hight_d = contour[1][1] - contour[0][1]
+
         contour = i2w.average_close_points(contour, 300)
         contour = np.column_stack((contour, np.zeros(len(contour))))
 
@@ -58,183 +187,74 @@ def build_door(wall_contours, scale):
         ])
 
         try:
-            matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), 0  # Устанавливаем смещение
+            matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), float(height)/2  # Устанавливаем смещение
             # matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1] + (hight_d * float(scale))/2), 0  # Устанавливаем смещение
             # Создаём 2D полигон
-            mesh.apply_scale(6)
+            win_mesh.apply_scale(0.1)
+            hight_win = win_mesh.extents.tolist()
+            if wight_d > hight_d:
+                scale_win = wight_d*float(scale) / hight_win[2]
+                # print("wight_d = ", wight_d)
+            else:
+                scale_win = hight_d*float(scale) / hight_win[2]
+                # print("hight_d = ", hight_d)
+            # print(hight_win)
+            # print(scale_win)
+            win_mesh.apply_scale([1, 1, scale_win])
             rot = rotation_matrix(np.pi / 2, [-1, 0, 0])
+            rot1 = rotation_matrix(np.pi / 2, [0, 1, 0])
             transform = concatenate_matrices(matrix_z_inversion, rot)
-            mesh.apply_transform(transform)
+            transform = concatenate_matrices(transform, rot1)
+            win_mesh.apply_transform(transform)
+
+
             # print(transform)
             if wight_d < hight_d:
                 # 1. Находим его центр (bounding box центроид)
-                center = mesh.bounding_box.centroid
+                center = win_mesh.bounding_box.centroid
 
                 # 2. Переносим в начало координат
-                mesh.apply_translation(-center)
+                win_mesh.apply_translation(-center)
 
                 # 3. Поворачиваем (например, на 45° вокруг оси Z)
                 rotation = rotation_matrix(np.pi / 2, [0, 0, 1])  # Ось Z
-                mesh.apply_transform(rotation)
+                win_mesh.apply_transform(rotation)
 
                 # 4. Возвращаем на исходную позицию
-                mesh.apply_translation(center)
+                win_mesh.apply_translation(center)
 
             # Добавляем в сцену
-            scene_objects.append(mesh)
+            hight_win = win_mesh.extents.tolist()
+            hight_win[2] = round(hight_win[2], 3)
 
-            print(f"Контур DOOR #{i + 1} успешно преобразован в 3D-объект")
+            # print(hight_win)
+            b_w_p = float(height)/2
+            b_w_p = round(b_w_p, 3)
+            h_w_p = float(height) - hight_win[2] - b_w_p
+            h_w_p = round(h_w_p, 3)
 
-        except Exception as e:
-            print(f"Ошибка обработки контура DOOR #{i + 1}: {str(e)}")
-            continue
+            # print(f"высота = {height}, высота снизу = {b_w_p}, высота сверху = {h_w_p}, высота окна = {hight_win[2]}, высота сверху1 = {float(height) - h_w_p/2}")
+            transformation = np.eye(4)
+            box11 = trimesh.primitives.Box(extents=[hight_win[0], hight_win[1], h_w_p])
+            h_w_p = float(height) - h_w_p/2
+            transformation[:3, 3] = scaled[0], -(scaled[1]), h_w_p # Устанавливаем смещение
+            box11.apply_transform(transformation)
+            # print(box11.bounds)
 
-    return scene_objects
+            transformation = np.eye(4)
+            box2 = trimesh.primitives.Box(extents=[hight_win[0], hight_win[1], b_w_p])
+            transformation[:3, 3] = scaled[0], -(scaled[1]), b_w_p/2 # Устанавливаем смещение float(height) - h_d_p/2
+            box2.apply_transform(transformation)
 
+            scene_objects.append(win_mesh)
+            scene_objects.append(box11)
+            scene_objects.append(box2)
 
-def create_rectangular_window(width=1.5, height=1.0, frame_width=0.1, frame_thickness=0.05,
-                              sill_width=0.2, sill_thickness=0.05, sill_protrusion=0.15,
-                              glass_thickness=0.01):
-    """
-    Creates a 3D model of a rectangular window with a windowsill
-
-    Parameters:
-    width: window width
-    height: window height
-    frame_width: window frame width
-    frame_thickness: window frame thickness
-    sill_width: windowsill width
-    sill_thickness: windowsill thickness
-    sill_protrusion: windowsill protrusion from the wall
-    glass_thickness: glass thickness
-
-    Returns:
-    Combined trimesh.Trimesh object containing all window elements
-    """
-    # Create a list to store all window components
-    components = []
-
-    # 1. Create window frame (4 parts instead of boolean difference)
-    # Vertical frame parts
-    left_frame = trimesh.primitives.Box(
-        extents=[frame_width, frame_thickness, height + 2 * frame_width])
-    right_frame = trimesh.primitives.Box(
-        extents=[frame_width, frame_thickness, height + 2 * frame_width])
-
-    # Horizontal frame parts
-    top_frame = trimesh.primitives.Box(
-        extents=[width, frame_thickness, frame_width])
-    bottom_frame = trimesh.primitives.Box(
-        extents=[width, frame_thickness, frame_width])
-
-    # Position frame parts
-    left_frame.apply_translation([-(width / 2 + frame_width / 2), 0, 0])
-    right_frame.apply_translation([(width / 2 + frame_width / 2), 0, 0])
-    top_frame.apply_translation([0, 0, (height / 2 + frame_width / 2)])
-    bottom_frame.apply_translation([0, 0, -(height / 2 + frame_width / 2)])
-
-    # 2. Create glass
-    glass = trimesh.primitives.Box(
-        extents=[width - 0.02, glass_thickness, height - 0.02])
-    glass.apply_translation([0, frame_thickness / 2, 0])
-
-    # 3. Create windowsill
-    sill = trimesh.primitives.Box(
-        extents=[width + 2 * sill_protrusion,
-                 sill_width,
-                 sill_thickness])
-    sill.apply_translation([0,
-                            -frame_thickness / 2 - sill_width / 2,
-                            height / 2 - frame_width - sill_thickness / 2])
-
-    # Convert all primitives to Trimesh objects
-    components = [
-        left_frame, right_frame, top_frame, bottom_frame,
-        glass, sill
-    ]
-    meshes = [m if isinstance(m, trimesh.Trimesh) else m.to_mesh() for m in components]
-
-    # Verify all meshes are watertight
-    for mesh in meshes:
-        if not mesh.is_volume:
-            # Create a new mesh by copying vertices and faces
-            repaired = trimesh.Trimesh(vertices=mesh.vertices.copy(),
-                                       faces=mesh.faces.copy())
-            repaired.fill_holes()
-            repaired.fix_normals()
-            meshes[meshes.index(mesh)] = repaired
-
-    # Combine all components
-    window_mesh = trimesh.util.concatenate(meshes)
-
-    return window_mesh
-
-def build_window(window_position, wall_contours, scale, height = 2.7):
-    scene_objects = []
-    # for i, contour in enumerate(wall_contours):
-    #     for j, point in enumerate(contour):
-
-    for i, contour in enumerate(window_position):
-        wight_d = contour[2][0] - contour[0][0]
-        hight_d = contour[1][1] - contour[0][1]
-        print(contour)
-        # print(contour * float(scale))
-        # print(translation_matrix(scaled))
-        wight_w = wight_d * float(scale)
-        print(wight_w)
-        print(wight_w * float(scale))
-
-        mesh = create_rectangular_window(wight_w/2, 1.5)
-
-        matrix_z_inversion = np.array([
-            [1, 0, 0, 0],
-            [0, 1, 0, 0],
-            [0, 0, -1, 0],
-            [0, 0, 0, 1]
-        ])
-        contour = i2w.average_close_points(contour, 300)
-        contour = np.column_stack((contour, np.zeros(len(contour))))
-
-        # print(contour)
-        # Преобразуем контур в массив точек
-        contour_points = np.array(contour[0])
-
-        # Масштабируем координаты
-        scaled = contour_points * float(scale)
-        print(scaled)
-        try:
-            matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), float(height)*0.5  # Устанавливаем смещение
-            # matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1] + (hight_d * float(scale))/2), 0  # Устанавливаем смещение
-            # Создаём 2D полигон
-            mesh.apply_scale(6)
-            # rot = rotation_matrix(np.pi / 2, [0, -1, 0])
-            # transform = concatenate_matrices(matrix_z_inversion, rot)
-            transform = concatenate_matrices(matrix_z_inversion)
-            mesh.apply_transform(transform)
-            # print(transform)
-            if wight_d < hight_d:
-                # 1. Находим его центр (bounding box центроид)
-                center = mesh.bounding_box.centroid
-
-                # 2. Переносим в начало координат
-                mesh.apply_translation(-center)
-
-                # 3. Поворачиваем (например, на 45° вокруг оси Z)
-                rotation = rotation_matrix(np.pi / 2, [0, 0, 1])  # Ось Z
-                mesh.apply_transform(rotation)
-
-                # 4. Возвращаем на исходную позицию
-                mesh.apply_translation(center)
-
-            # Добавляем в сцену
-            scene_objects.append(mesh)
-
-            print(f"Контур WIN #{i + 1} успешно преобразован в 3D-объект")
+            print(f"Контур Window #{i + 1} успешно преобразован в 3D-объект")
 
         except Exception as e:
-            print(f"Ошибка обработки контура WINDOQ #{i + 1}: {str(e)}")
+            print(f"Ошибка обработки контура Window #{i + 1}: {str(e)}")
             continue
-    print("window")
 
     return scene_objects
 
@@ -245,7 +265,6 @@ def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0):
     :param original_size: Исходные размеры изображения (height, width)
     :param scale: Масштаб преобразования (пиксели в метры)
     :param height: Высота помещения в метрах
-    :param esp: округление стен
     :return: Сцена с 3D-моделью (trimesh.Scene)
     """
 
@@ -264,13 +283,11 @@ def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0):
             print(f"Контур #{i + 1} пропущен (мало точек: {len(contour_points)})")
             continue
 
-        # next_wall = wall_contours[(i + 1) % len(wall_contours)]
 
-        # build_door(wall_contours[i], next_wall, scale)
 
         # Масштабируем координаты
         scaled = contour_points * float(scale)
-        print(scaled)
+        # print(scaled)
         all_cont.append(scaled)
 
 
@@ -308,7 +325,7 @@ def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0):
     if not scene_objects:
         raise ValueError("Не удалось создать ни одного 3D-объекта!")
 
-    print(all_cont)
+    # print(all_cont)
     all_cont = np.vstack(all_cont)
 
     # Находим выпуклую оболочку

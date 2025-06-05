@@ -55,14 +55,14 @@ def click():
             wall_hight,
         )
 
-        scene1.add_geometry(gm1.build_door(filtered_contours_door, model_scale))
+        scene1.add_geometry(gm1.build_door(filtered_contours_door, wall_contours, model_scale, wall_hight))
         scene1.add_geometry(gm1.build_window(filtered_contours_window, wall_contours, model_scale, wall_hight))
 
         # Визуализация результата
         scene1.show()
-        # filename = filedialog.asksaveasfilename()
+        filename = filedialog.asksaveasfilename()
         # # Экспорт модели (опционально)
-        # scene1.export(filename)
+        scene1.export(filename)
 
     except FileNotFoundError as e:
         print(f"Ошибка загрузки файла: {e}")

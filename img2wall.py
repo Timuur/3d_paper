@@ -1,11 +1,8 @@
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 from random import randrange
 
 import check_img_ai
-
-from tabulate import tabulate
 
 def average_close_points(points, threshold=2):
     """
@@ -61,8 +58,10 @@ def average_close2points(points, threshold=2):
                 x1, y1 = points[i][j].ravel()
 
             # Сравниваем со всеми остальными точками
-            for k in range(i, len(points)):
-                for l in range(j + 1 if k == i else 0, len(points[k])):
+            for k in range(len(points)):
+                # for k in range(i, len(points)):
+                for l in range(len(points[k])):
+                    # for l in range(j + 1 if k == i else 0, len(points[k])):
                     # Аналогично получаем x2, y2
                     if points[k][l].ndim == 2:
                         x2, y2 = points[k][l][0]
@@ -196,8 +195,7 @@ def process_floor_plan(image_path, border_size=20):
     # print(contours)
     # print("________________________________________________________________________")
 
-    contours = average_close2points(contours, 4)
-    contours = average_close2points(contours, 2)
+
     # print(f"\nКонтур #abs:")
     # print(contours)
     # print("________________________________________________________________________")
@@ -224,18 +222,13 @@ def process_floor_plan(image_path, border_size=20):
         xy4 = xmax + border_size, ymin + border_size
         xy3 = xmax + border_size, ymax + border_size
         xyy = xy1,xy2,xy3,xy4
-        # xywh_tensor = detections[i].xywh.cpu()  # Detections in Tensor format in CPU memory
-        # xywh = xywh_tensor.numpy().squeeze()  # Convert tensors to Numpy array
-        # xn, yn, w, h = xywh.astype(int)  # Extract individual coordinates and convert to int
-        # xy = xn + border_size, yn + border_size
-        # xyy = xy1,xy2,xy3,xy4
-        # contours.append(np.array(xyy))
+
         # Get bounding box class ID and name
         classidx = int(detections[i].cls.item())
         classname = labels[classidx]
 
         # Get bounding box confidence
-        conf = detections[i].conf.item()
+        # conf = detections[i].conf.item()
 
         if classname == "Window":
             window.append(np.array(xyy))
@@ -249,12 +242,12 @@ def process_floor_plan(image_path, border_size=20):
         # Draw box if confidence threshold is high enough
         # if conf > 0.5:
         # Draw box around object
-        cv2.rectangle(cleaned_image, (xmin, ymin), (xmax, ymax), (randrange(0,256), randrange(0, 256), randrange(50, 256)), 2)
+        # cv2.rectangle(cleaned_image, (xmin, ymin), (xmax, ymax), (randrange(0,256), randrange(0, 256), randrange(50, 256)), 2)
 
     # _________________________________________________________________________________________
     # debug_box = [window,box,door,toilet]
     for i, contour in enumerate(window):
-        contour = np.array(average_close_points(contour.reshape(-1, 2), 1))
+
         # print(contour)\
         x, y, w, h = cv2.boundingRect(contour)
         if (x > border_size + border_margin
@@ -262,11 +255,10 @@ def process_floor_plan(image_path, border_size=20):
                 and (x + w) < (image_width - border_size - border_margin)
                 and (y + h) < (image_height - border_size - border_margin)):
             filtered_contours_window.append(contour)
-            # cv2.drawContours(bordered_image, [contour], 0,
-            #                  (randrange(50, 256), randrange(50, 256), randrange(50, 256)), 1)
+            cv2.drawContours(bordered_image, [contour], 0,
+                             (randrange(50, 256), randrange(50, 256), randrange(50, 256)), 1)
 
     for i, contour in enumerate(box):
-        contour = np.array(average_close_points(contour.reshape(-1, 2), 1))
         # print(contour)\
         x, y, w, h = cv2.boundingRect(contour)
         if (x > border_size + border_margin
@@ -274,11 +266,10 @@ def process_floor_plan(image_path, border_size=20):
                 and (x + w) < (image_width - border_size - border_margin)
                 and (y + h) < (image_height - border_size - border_margin)):
             filtered_contours_box.append(contour)
-            # cv2.drawContours(bordered_image, [contour], 0,
-            #                  (randrange(50, 256), randrange(50, 256), randrange(50, 256)), 1)
+            cv2.drawContours(bordered_image, [contour], 0,
+                             (randrange(50, 256), randrange(50, 256), randrange(50, 256)), 1)
 
     for i, contour in enumerate(door):
-        contour = np.array(average_close_points(contour.reshape(-1, 2), 1))
         # print(contour)\
         x, y, w, h = cv2.boundingRect(contour)
         if (x > border_size + border_margin
@@ -286,11 +277,10 @@ def process_floor_plan(image_path, border_size=20):
                 and (x + w) < (image_width - border_size - border_margin)
                 and (y + h) < (image_height - border_size - border_margin)):
             filtered_contours_door.append(contour)
-            # cv2.drawContours(bordered_image, [contour], 0,
-            #                  (randrange(50, 256), randrange(50, 256), randrange(50, 256)), 1)
+            cv2.drawContours(bordered_image, [contour], 0,
+                             (randrange(50, 256), randrange(50, 256), randrange(50, 256)), 1)
 
     for i, contour in enumerate(toilet):
-        contour = np.array(average_close_points(contour.reshape(-1, 2), 1))
         # print(contour)\
         x, y, w, h = cv2.boundingRect(contour)
         if (x > border_size + border_margin
@@ -298,8 +288,11 @@ def process_floor_plan(image_path, border_size=20):
                 and (x + w) < (image_width - border_size - border_margin)
                 and (y + h) < (image_height - border_size - border_margin)):
             filtered_contours_toilet.append(contour)
-            # cv2.drawContours(bordered_image, [contour], 0,
-            #                  (randrange(50, 256), randrange(50, 256), randrange(50, 256)), 1)
+            cv2.drawContours(bordered_image, [contour], 0,
+                             (randrange(50, 256), randrange(50, 256), randrange(50, 256)), 2)
+
+    contours = average_close2points(contours, 4)
+    contours = average_close2points(contours, 2)
 
     for i, contour in enumerate(contours):
         contour = np.array( average_close_points(   contour.reshape(-1, 2), 3))
@@ -311,7 +304,7 @@ def process_floor_plan(image_path, border_size=20):
                 and (y + h) < (image_height - border_size - border_margin)):
             filtered_contours.append(contour)
             cv2.drawContours(bordered_image, [contour], 0, (randrange(50,256), randrange(50, 256), randrange(50, 256)), 1)
-        contour_points = contour.reshape(-1, 2)
+        # contour_points = contour.reshape(-1, 2)
 
     #     # Вывод таблицы для каждого контура
     #     print(f"\nКонтур #{i + 1}:")
@@ -321,43 +314,43 @@ def process_floor_plan(image_path, border_size=20):
     #         tablefmt="grid",
     #         showindex="always"
     #     ))
+    # # print("________________________________________________________________________")
+    # #
+    # # print(f"\nКонтур #abs:")
+    # # print(filtered_contours)
     # print("________________________________________________________________________")
-    #
-    print(f"\nКонтур #abs:")
-    print(filtered_contours)
-    print("________________________________________________________________________")
-    print("________________________________________________________________________")
+    # print("________________________________________________________________________")
 
     # _________________________________________________________________________________________
-    # Визуализация промежуточных результатов
-    debug_images = [
-        original_image,
-        bordered_image,
-        gray_image,
-        binary_image,
-        cleaned_image,
-        processed_image
-    ]
-    # Конвертация BGR в RGB для корректного отображения
-    debug_images_rgb = [cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
-                        for img in debug_images]
-
-    titles = [
-        'Original Image',
-        'Bordered Image',
-        'Grayscale',
-        'Binary Image',
-        'Cleaned Image',
-        'processed Image'
-    ]
-
-    plt.figure(figsize=(15, 10))
-    for i, (img, title) in enumerate(zip(debug_images_rgb, titles)):
-        plt.subplot(2, 3, i + 1)
-        plt.imshow(img, cmap='gray' if i > 1 else None)
-        plt.title(title)
-        plt.axis('off')
-    plt.tight_layout()
+    # # Визуализация промежуточных результатов
+    # debug_images = [
+    #     original_image,
+    #     bordered_image,
+    #     gray_image,
+    #     binary_image,
+    #     cleaned_image,
+    #     processed_image
+    # ]
+    # # Конвертация BGR в RGB для корректного отображения
+    # debug_images_rgb = [cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
+    #                     for img in debug_images]
+    #
+    # titles = [
+    #     'Original Image',
+    #     'Bordered Image',
+    #     'Grayscale',
+    #     'Binary Image',
+    #     'Cleaned Image',
+    #     'processed Image'
+    # ]
+    #
+    # plt.figure(figsize=(15, 10))
+    # for i, (img, title) in enumerate(zip(debug_images_rgb, titles)):
+    #     plt.subplot(2, 3, i + 1)
+    #     plt.imshow(img, cmap='gray' if i > 1 else None)
+    #     plt.title(title)
+    #     plt.axis('off')
+    # plt.tight_layout()
     # plt.show()
     # _________________________________________________________________________________________
     #cv2.imwrite('output.png', cleaned_image)
