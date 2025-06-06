@@ -1,3 +1,5 @@
+import sys
+from pathlib import Path
 import numpy as np
 import trimesh
 import img2wall as i2w
@@ -5,8 +7,21 @@ from scipy.spatial import ConvexHull
 from trimesh.transformations import rotation_matrix, concatenate_matrices
 from shapely.geometry import Polygon
 
-mesh_door = trimesh.load('Door_Component.obj')
-mesh_window = trimesh.load('window1.obj')
+def get_file_path(filename):
+    """ Получает правильный путь к файлу после компиляции """
+    if getattr(sys, 'frozen', False):
+        # Если запущено из .exe
+        base_path = Path(sys._MEIPASS)
+    else:
+        # Если запущено из .py
+        base_path = Path(__file__).parent
+    return base_path / filename
+
+obj_path_door = get_file_path("3d_obj_test/Door_Component.obj")
+obj_path_win = get_file_path("3d_obj_test/window1.obj")
+
+mesh_door = trimesh.load(obj_path_door)
+mesh_window = trimesh.load(obj_path_win)
 
 def gen_floor(objects):
 

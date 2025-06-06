@@ -1,7 +1,8 @@
 from tkinter import *
 from tkinter import ttk, filedialog
 from PIL import ImageTk, Image
-
+import time
+import threading
 #______________________________________________________________________________________________________________________
 # ICON = zlib.decompress(base64.b64decode("eJxjYGAEQgEBBiDJwZDBysAgxsDAoAHEQCEGBQaIOAg4sDIgACMUj4JRMApGwQgF/ykEAFXxQRc="))
 # _, ICON_PATH = tempfile.mkstemp()
@@ -28,26 +29,25 @@ import img2wall as i2w
 import gen_mod1 as gm1
 #______________________________________________________________________________________________________________________
 def click():
-
-    plan = entry_f.get()
-    model_scale = entry_ms.get()
-    wall_hight = entry_wh.get()
-    p2m = entry_mod.get()
-    print(plan)
-    print(model_scale)
-    print(wall_hight)
-    print(p2m)
-
     try:
+        # Остановка предыдущего прогресс-бара (если был запущен)
+        # progress_bar.stop()
+
+        # Получение текущих значений из полей ввода
+        plan = entry_f.get()
+        model_scale = float(entry_ms.get())  # Преобразуем в float
+        wall_hight = float(entry_wh.get())  # Преобразуем в float
+
+        print("Текущие параметры:")
+        print(f"План: {plan}")
+        print(f"Масштаб модели: {model_scale}")
+        print(f"Высота стен: {wall_hight}")
+
         # Обработка плана помещения
         (wall_contours, image_size, filtered_contours_door, filtered_contours_window,
          filtered_contours_box, filtered_contours_toilet) = i2w.process_floor_plan(plan)
 
-        # Параметры моделирования
-        # model_scale = 0.05 # 1 пиксель = 5 см
-        # wall_hight = 20  # Высота потолков 2.7 метра
-
-        # Создание 3D-модели
+        # Создание 3D-модели с текущими параметрами
         scene1 = gm1.build_3d_model(
             wall_contours,
             image_size,
@@ -60,17 +60,48 @@ def click():
 
         # Визуализация результата
         scene1.show()
-        filename = filedialog.asksaveasfilename()
-        # # Экспорт модели (опционально)
-        scene1.export(filename)
+
+        # Запрос места сохранения
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".obj",
+            filetypes=[("OBJ files", "*.obj"), ("All files", "*.*")]
+        )
+
+        # Экспорт модели
+        if filename:
+            scene1.export(filename)
+            status_text = f"Операция завершена\nФайл сохранён как:\n{filename}"
+        else:
+            scene1.export("model.obj")
+            status_text = f"Операция завершена\nФайл сохранён как:\nmodel.obj"
 
     except FileNotFoundError as e:
-        print(f"Ошибка загрузки файла: {e}")
-    # except ValueError as e:
-    #     print(f"Ошибка обработки данных: {e}")
-    # except Exception as e:
-    #     print(f"Неизвестная ошибка: {e}")
+        status_text = f"Ошибка: файл не найден\n{str(e)}"
+    except ValueError as e:
+        status_text = f"Ошибка ввода данных\nПроверьте числовые значения\n{str(e)}"
+    except Exception as e:
+        status_text = f"Неизвестная ошибка\n{str(e)}"
+    finally:
+        progress_bar.stop()
+        status_label.config(text=status_text)
+        # Возвращаем статус завершения
+        return status_text
 
+def start_operation():
+    # Сброс прогресс-бара и статуса перед новым запуском
+    progress_bar.stop()
+    progress_bar['value'] = 0
+    progress_bar.start(10)
+    status_label.config(text="Выполняется операция...")
+
+    def thread_complete(status):
+        # Эта функция будет вызвана при завершении потока
+        progress_bar.stop()
+        status_label.config(text=status)
+
+    # Запуск в отдельном потоке
+    thread = threading.Thread(target=lambda: thread_complete(click()))
+    thread.start()
 #______________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________
 e_ms = DoubleVar()
@@ -78,6 +109,7 @@ e_wh = DoubleVar()
 e_esp = DoubleVar()
 e_img = StringVar()
 e_mod = StringVar()
+
 
 def img_read():
     entry_f.delete(0, last="end")
@@ -107,7 +139,7 @@ entry_f.grid(row=1, column=0, padx=[15,0])
 entry_f.insert(0,"Выберите план")
 
 entry_p = ttk.Label()
-entry_p.grid(row=1, column=1, padx=[5,0], rowspan=160)
+entry_p.grid(row=1, column=1, padx=[5,0], rowspan=16)
 
 # img = Image.open('G:/Pract_Prog/Pract_Prog_F/kristal/1k.png')
 # img = img.resize((300, 200), Image.Resampling.LANCZOS)
@@ -125,18 +157,17 @@ label_wh.grid(row=4, column=0, sticky = 'w', padx=[15,0], pady=[5, 4])
 entry_wh = ttk.Entry(textvariable=e_wh)
 entry_wh.grid(row=5, column=0, padx=[15,0])
 e_wh.set(20)
-
-label_mod = ttk.Label(text = "Название модели(необязательно)")
-label_mod.grid(row=6, column=0, sticky = 'w', padx=[15,0], pady=[5, 4])
-entry_mod = ttk.Entry(textvariable=e_mod)
-entry_mod.grid(row=7, column=0, padx=[15,0])
-entry_mod.insert(0,"model.obj")
 #______________________________________________________________________________________________________________________
 
 button = ttk.Button(text="Показать план", command=img_read)
 button.grid(row=0, column=1, pady=10)
-button = ttk.Button(text="Создать модель", command=click)
+button = ttk.Button(text="Создать модель", command=start_operation)
 button.grid(row=10, column=0, pady=10)
+
+progress_bar = ttk.Progressbar(root, orient='horizontal', length=300, mode='indeterminate')
+progress_bar.grid(row=22, column=0,columnspan=3, pady=10, padx=[15,0])
+status_label = ttk.Label(root, text="Готово к работе")
+status_label.grid(row=19, column=0, pady=10, rowspan=2, padx=[15,0])
 #______________________________________________________________________________________________________________________
 
 root.mainloop()
