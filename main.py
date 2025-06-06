@@ -84,8 +84,6 @@ def click():
     finally:
         progress_bar.stop()
         status_label.config(text=status_text)
-        # Возвращаем статус завершения
-        return status_text
 
 def start_operation():
     # Сброс прогресс-бара и статуса перед новым запуском
@@ -94,13 +92,8 @@ def start_operation():
     progress_bar.start(10)
     status_label.config(text="Выполняется операция...")
 
-    def thread_complete(status):
-        # Эта функция будет вызвана при завершении потока
-        progress_bar.stop()
-        status_label.config(text=status)
-
     # Запуск в отдельном потоке
-    thread = threading.Thread(target=lambda: thread_complete(click()))
+    thread = threading.Thread(target=click)
     thread.start()
 #______________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________
