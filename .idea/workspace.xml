@@ -183,7 +183,7 @@
     &quot;last_opened_file_path&quot;: &quot;D:/Project/floor-plan-object-detection&quot;
   }
 }</component>
-  <component name="RunManager">
+  <component name="RunManager" selected="Python.main">
     <configuration name="main" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <module name="Pract_Prog_F" />
       <option name="ENV_FILES" value="" />
