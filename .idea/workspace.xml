@@ -5,7 +5,130 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ab19be21-686b-48e6-94ed-00fa0fcf6674" name="Changes" comment="Сырой продукт">
+      <change afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ai_model/my_model.pt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/capture.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/check_img_ai.py" beforeDir="false" afterPath="$PROJECT_DIR$/check_img_ai.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/corner.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/corner2.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/door_wooden.glb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/filter.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/gen_model.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/img2wall.py" beforeDir="false" afterPath="$PROJECT_DIR$/img2wall.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kristal/1k.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/kristal/2k.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/kristal/3k.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/kristal/4k.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.spec" beforeDir="false" afterPath="$PROJECT_DIR$/main.spec" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/material.mtl" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/material_0.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/material_2.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/model.obj" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/model1.obj" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/model11.obj" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/model111.obj" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/model_v2.6.obj" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/model_v2.8-1.obj" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/model_v2.8.obj" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/output.png" beforeDir="false" afterPath="$PROJECT_DIR$/output.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/prime/1p.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/prime/2p.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/prime/3p.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/prime/4p.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/proc.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/svg2png.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0001.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0002.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0003.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0004.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0005.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0006.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0007.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0008.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0009.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0010.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0011.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0012.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0013.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0014.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0015.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0016.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0017.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0018.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0019.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/0020.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/01.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/02.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI.zip" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0001_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0002_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0003_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0004_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0005_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0006_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0007_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0008_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0009_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0010_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0011_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0012_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0013_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0014_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0015_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0016_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0017_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0018_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0019_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/AI/0020_.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/archive-2025-05-13_14-46-53.zip" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/archive.7z" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/archive/0001.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/archive/0002.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/archive/01.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/archive/02.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/archive/s1_2-6_1s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/archive/s1_2-6_2s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_1_1s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_1_2s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_2-6_1s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_2-6_2s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_2-6_3s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_2-6_4s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_2-6_5s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_2-6_6s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_2-6_7s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_2_10s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_2_8s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_3-4_10s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_3-4_9s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_3-6_8s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_5-6_10s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_5-6_11s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s1_5-6_9s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s2_1-7_11s.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s2_1-7_1s-1.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s2_1-7_1s.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s2_1-7_5s.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s2_1-7_6s.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s2_1_3s.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s2_1_8s.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s2_2-7_10s.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s2_2-7_3s.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s2_2-7_4s.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s2_2-7_7s.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s2_2-7_8s.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/s2_2-7_9s.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/unnamed.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/wind/1w.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/wind/2w.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/wind/3w.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/wind/3wu.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/wind/4w.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/window.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Новый текстовый документ.txt" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
