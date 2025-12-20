@@ -30,6 +30,8 @@ import gen_mod1 as gm1
 #______________________________________________________________________________________________________________________
 def click():
     try:
+        status_label.config(text="Выполняется операция...")
+
         # Остановка предыдущего прогресс-бара (если был запущен)
         # progress_bar.stop()
 
@@ -44,8 +46,10 @@ def click():
         print(f"Высота стен: {wall_hight}")
 
         # Обработка плана помещения
-        (wall_contours, image_size, filtered_contours_door, filtered_contours_window,
-         filtered_contours_box, filtered_contours_toilet) = i2w.process_floor_plan(plan)
+        # (wall_contours, image_size, filtered_contours_door, filtered_contours_window,
+        #  filtered_contours_box, filtered_contours_toilet) = i2w.process_floor_plan(plan)
+
+        (wall_contours, image_size, filtered_contours_obj) = i2w.process_floor_plan(plan)
 
         # Создание 3D-модели с текущими параметрами
         scene1 = gm1.build_3d_model(
@@ -55,8 +59,8 @@ def click():
             wall_hight,
         )
 
-        scene1.add_geometry(gm1.build_door(filtered_contours_door, wall_contours, model_scale, wall_hight))
-        scene1.add_geometry(gm1.build_window(filtered_contours_window, wall_contours, model_scale, wall_hight))
+        scene1.add_geometry(gm1.build_door(filtered_contours_obj['Door'], wall_contours, model_scale, wall_hight))
+        scene1.add_geometry(gm1.build_window(filtered_contours_obj['Window'], wall_contours, model_scale, wall_hight))
 
         # Визуализация результата
         scene1.show()
@@ -71,30 +75,34 @@ def click():
         if filename:
             scene1.export(filename)
             status_text = f"Операция завершена\nФайл сохранён как:\n{filename}"
+            # print(f"Операция завершена\nФайл сохранён как:\n{filename}")
         else:
-            scene1.export("model.obj")
-            status_text = f"Операция завершена\nФайл сохранён как:\nmodel.obj"
+            status_text = f"Операция отменена"
+            # print(f"Операция завершена\nФайл сохранён как:\nmodel.obj")
 
     except FileNotFoundError as e:
         status_text = f"Ошибка: файл не найден\n{str(e)}"
+        # print( f"Ошибка: файл не найден\n{str(e)}")
     except ValueError as e:
         status_text = f"Ошибка ввода данных\nПроверьте числовые значения\n{str(e)}"
+        # print( f"Ошибка ввода данных\nПроверьте числовые значения\n{str(e)}")
     except Exception as e:
         status_text = f"Неизвестная ошибка\n{str(e)}"
+        # print(f"Неизвестная ошибка\n{str(e)}")
     finally:
-        progress_bar.stop()
+#         progress_bar.stop()
         status_label.config(text=status_text)
-
-def start_operation():
-    # Сброс прогресс-бара и статуса перед новым запуском
-    progress_bar.stop()
-    progress_bar['value'] = 0
-    progress_bar.start(10)
-    status_label.config(text="Выполняется операция...")
-
-    # Запуск в отдельном потоке
-    thread = threading.Thread(target=click)
-    thread.start()
+#
+# def start_operation():
+#     # Сброс прогресс-бара и статуса перед новым запуском
+#     progress_bar.stop()
+#     progress_bar['value'] = 0
+#     progress_bar.start(10)
+#     status_label.config(text="Выполняется операция...")
+#
+#     # Запуск в отдельном потоке
+#     thread = threading.Thread(target=click)
+#     thread.start()
 #______________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________
 e_ms = DoubleVar()
@@ -154,11 +162,12 @@ e_wh.set(20)
 
 button = ttk.Button(text="Показать план", command=img_read)
 button.grid(row=0, column=1, pady=10)
-button = ttk.Button(text="Создать модель", command=start_operation)
+button = ttk.Button(text="Создать модель", command=click)
+# button = ttk.Button(text="Создать модель", command=start_operation)
 button.grid(row=10, column=0, pady=10)
 
-progress_bar = ttk.Progressbar(root, orient='horizontal', length=300, mode='indeterminate')
-progress_bar.grid(row=22, column=0,columnspan=3, pady=10, padx=[15,0])
+# progress_bar = ttk.Progressbar(root, orient='horizontal', length=300, mode='indeterminate')
+# progress_bar.grid(row=22, column=0,columnspan=3, pady=10, padx=[15,0])
 status_label = ttk.Label(root, text="Готово к работе")
 status_label.grid(row=19, column=0, pady=10, rowspan=2, padx=[15,0])
 #______________________________________________________________________________________________________________________

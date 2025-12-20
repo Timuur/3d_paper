@@ -2,7 +2,9 @@ import cv2
 import numpy as np
 from random import randrange
 
-import check_img_ai
+from matplotlib import pyplot as plt
+
+from check_img_ai import get_coord
 
 def average_close_points(points, threshold=2):
     """
@@ -147,6 +149,44 @@ def replace_gray_in_monochrome(image, lower_gray=39, upper_gray=255, target_valu
     image[mask] = target_value
     return image
 
+def get_scale(classes_dict, original_image, pixel_on_map=151):
+    #1 получить координаты дверей
+    #2 зная примерно идеальную длину двери высчитать необходимый масштаб
+    #3 применить масштаб
+    for i, contour in enumerate(classes_dict['Door']):
+        wight_d_i = contour[2][0] - contour[0][0]
+        hight_d_i = contour[1][1] - contour[0][1]
+        if wight_d_i > hight_d_i:
+            # scale_win = wight_d_i * float(scale) / hight_win[0]
+            scale_p = pixel_on_map / wight_d_i
+            print('(', scale_p,")hight_d = ", pixel_on_map, ' / ', wight_d_i,'/', wight_d_i*0.05)
+        else:
+            # scale_win = hight_d_i * float(scale) / hight_win[0]
+            scale_p =  pixel_on_map / hight_d_i
+            print('(', scale_p,")hight_d = ", pixel_on_map, '/', hight_d_i,'/', hight_d_i*0.05)
+    # for i, contour in enumerate(classes_dict['door_bath']):
+    #     wight_d_i = contour[2][0] - contour[0][0]
+    #     hight_d_i = contour[1][1] - contour[0][1]
+    #     if wight_d_i > hight_d_i:
+    #         # scale_win = wight_d_i * float(scale) / hight_win[0]
+    #         scale_p = pixel_on_map / wight_d_i
+    #         print('(', scale_p,")hight_d = ", pixel_on_map, '/', wight_d_i)
+    #     else:
+    #         # scale_win = hight_d_i * float(scale) / hight_win[0]
+    #         scale_p =  pixel_on_map / hight_d_i
+    #         print('(', scale_p,")hight_d = ", pixel_on_map, '/', hight_d_i)
+    # for i, contour in enumerate(classes_dict['door_bath_l']):
+    #     wight_d_i = contour[2][0] - contour[0][0]
+    #     hight_d_i = contour[1][1] - contour[0][1]
+    #     if wight_d_i > hight_d_i:
+    #         # scale_win = wight_d_i * float(scale) / hight_win[0]
+    #         scale_p = pixel_on_map / wight_d_i
+    #         print('(', scale_p,")hight_d = ", pixel_on_map, '/', wight_d_i)
+    #     else:
+    #         # scale_win = hight_d_i * float(scale) / hight_win[0]
+    #         scale_p =  pixel_on_map / hight_d_i
+    #         print('(', scale_p,")hight_d = ", pixel_on_map, '/', hight_d_i)
+
 def process_floor_plan(image_path, border_size=20):
     """
     Основная функция обработки плана помещения
@@ -157,6 +197,47 @@ def process_floor_plan(image_path, border_size=20):
     # _________________________________________________________________________________________
     # Загрузка изображения и предобработка
     original_image = cv2.imread(image_path)
+
+
+    # _________________________________________________________________________________________
+    # _________________________________________________________________________________________
+
+    # class_path_txt = get_file_path('ai_model/classes.txt')
+    classes_dict  = {'Door': [], 'GasPlate': [], 'Wardor': [], 'Wall': [], 'Window': [], 'bathtube': [], 'box': [],
+                     'door_bath': [], 'door_bath_l': [], 'door_double': [], 'door_l': [], 'door_plast': [],
+                     'door_plast_l': [], 'door_vhod': [], 'door_vhod_l': [], 'racovina': [], 'racovina_bath': [],
+                     'setka': [], 'toulet': [], 'washing mashine': [], 'win_in_wall':[]
+                     }
+
+    detections, labels = get_coord(image_path)
+    print(detections)
+    print(labels)
+    for i in range(len(detections)):
+        # Get bounding box coordinates
+        # Ultralytics returns results in Tensor format, which have to be converted to a regular Python array
+        xyxy_tensor = detections[i].xyxy.cpu()  # Detections in Tensor format in CPU memory
+        xyxy = xyxy_tensor.numpy().squeeze()  # Convert tensors to Numpy array
+        xmin, ymin, xmax, ymax = xyxy.astype(int)  # Extract individual coordinates and convert to int
+        xy1 = xmin + border_size, ymin + border_size
+        xy2 = xmin + border_size, ymax + border_size
+        xy4 = xmax + border_size, ymin + border_size
+        xy3 = xmax + border_size, ymax + border_size
+        xyy = xy1,xy2,xy3,xy4
+
+        # Get bounding box class ID and name
+        classidx = int(detections[i].cls.item())
+        classname = labels[classidx]
+
+        # Get bounding box confidence
+        # conf = detections[i].conf.item()
+
+        if classname in classes_dict:
+            classes_dict[classname].append(np.array(xyy))
+
+    get_scale(classes_dict,original_image)
+    # _________________________________________________________________________________________
+    # _________________________________________________________________________________________
+
 
     # Замена черного фона на белый
     # black_pixels_mask = np.all(original_image[:, :, :3] == [0, 0, 0], axis=-1)
@@ -182,10 +263,10 @@ def process_floor_plan(image_path, border_size=20):
     # _________________________________________________________________________________________
 
     # Поиск контуров
-    contours, _ = cv2.findContours(processed_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours_wall, _ = cv2.findContours(processed_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     # Фильтрация контуров рамки
-    filtered_contours = []
+    filtered_contours_wall = []
     border_margin = -10
     image_height, image_width = processed_image.shape
 
@@ -200,101 +281,42 @@ def process_floor_plan(image_path, border_size=20):
     # print(contours)
     # print("________________________________________________________________________")
 
-    door = []
-    window = []
-    box = []
-    toilet = []
-    filtered_contours_door = []
-    filtered_contours_window = []
-    filtered_contours_box = []
-    filtered_contours_toilet = []
 
-
-    detections, labels = check_img_ai.get_coord(image_path)
-    for i in range(len(detections)):
-        # Get bounding box coordinates
-        # Ultralytics returns results in Tensor format, which have to be converted to a regular Python array
-        xyxy_tensor = detections[i].xyxy.cpu()  # Detections in Tensor format in CPU memory
-        xyxy = xyxy_tensor.numpy().squeeze()  # Convert tensors to Numpy array
-        xmin, ymin, xmax, ymax = xyxy.astype(int)  # Extract individual coordinates and convert to int
-        xy1 = xmin + border_size, ymin + border_size
-        xy2 = xmin + border_size, ymax + border_size
-        xy4 = xmax + border_size, ymin + border_size
-        xy3 = xmax + border_size, ymax + border_size
-        xyy = xy1,xy2,xy3,xy4
-
-        # Get bounding box class ID and name
-        classidx = int(detections[i].cls.item())
-        classname = labels[classidx]
-
-        # Get bounding box confidence
-        # conf = detections[i].conf.item()
-
-        if classname == "Window":
-            window.append(np.array(xyy))
-        if classname == "box":
-            box.append(np.array(xyy))
-        if classname == "Door":
-            door.append(np.array(xyy))
-        if classname == "toulet":
-            toilet.append(np.array(xyy))
-
-        # Draw box if confidence threshold is high enough
-        # if conf > 0.5:
-        # Draw box around object
-        # cv2.rectangle(cleaned_image, (xmin, ymin), (xmax, ymax), (randrange(0,256), randrange(0, 256), randrange(50, 256)), 2)
-
-    # _________________________________________________________________________________________
     # debug_box = [window,box,door,toilet]
-    for i, contour in enumerate(window):
 
-        # print(contour)\
-        x, y, w, h = cv2.boundingRect(contour)
-        if (x > border_size + border_margin
-                and y > border_size + border_margin
-                and (x + w) < (image_width - border_size - border_margin)
-                and (y + h) < (image_height - border_size - border_margin)):
-            filtered_contours_window.append(contour)
-            cv2.drawContours(bordered_image, [contour], 0,
-                             (randrange(50, 256), randrange(50, 256), randrange(50, 256)), 1)
+    # Создаем словарь для хранения отфильтрованных контуров
+    filtered_contours1 = {}
 
-    for i, contour in enumerate(box):
-        # print(contour)\
-        x, y, w, h = cv2.boundingRect(contour)
-        if (x > border_size + border_margin
-                and y > border_size + border_margin
-                and (x + w) < (image_width - border_size - border_margin)
-                and (y + h) < (image_height - border_size - border_margin)):
-            filtered_contours_box.append(contour)
-            cv2.drawContours(bordered_image, [contour], 0,
-                             (randrange(50, 256), randrange(50, 256), randrange(50, 256)), 1)
+    # Обрабатываем все категории в одном цикле
+    for category, contours in classes_dict.items():
+        color1 = (randrange(50, 256), randrange(50, 256), randrange(50, 256))
+        # Проверяем, что список контуров не пустой
+        if contours and len(contours) > 0:
+            # Инициализируем список для отфильтрованных контуров этой категории
+            filtered_contours1[category] = []
 
-    for i, contour in enumerate(door):
-        # print(contour)\
-        x, y, w, h = cv2.boundingRect(contour)
-        if (x > border_size + border_margin
-                and y > border_size + border_margin
-                and (x + w) < (image_width - border_size - border_margin)
-                and (y + h) < (image_height - border_size - border_margin)):
-            filtered_contours_door.append(contour)
-            cv2.drawContours(bordered_image, [contour], 0,
-                             (randrange(50, 256), randrange(50, 256), randrange(50, 256)), 1)
+            for contour in contours:
+                x, y, w, h = cv2.boundingRect(contour)
 
-    for i, contour in enumerate(toilet):
-        # print(contour)\
-        x, y, w, h = cv2.boundingRect(contour)
-        if (x > border_size + border_margin
-                and y > border_size + border_margin
-                and (x + w) < (image_width - border_size - border_margin)
-                and (y + h) < (image_height - border_size - border_margin)):
-            filtered_contours_toilet.append(contour)
-            cv2.drawContours(bordered_image, [contour], 0,
-                             (randrange(50, 256), randrange(50, 256), randrange(50, 256)), 2)
+                # Проверяем границы
+                if (x > border_size + border_margin
+                        and y > border_size + border_margin
+                        and (x + w) < (image_width - border_size - border_margin)
+                        and (y + h) < (image_height - border_size - border_margin)):
+                    # Добавляем в отфильтрованный список
+                    filtered_contours1[category].append(contour)
 
-    contours = average_close2points(contours, 4)
-    contours = average_close2points(contours, 2)
+                    # Рисуем контур (особая толщина для toilet)
+                    thickness = 2
+                    cv2.drawContours(bordered_image, [contour], 0, color1, thickness)
+        else:
+            # Если контуров нет, создаем пустой список для этой категории
+            filtered_contours1[category] = []
 
-    for i, contour in enumerate(contours):
+    contours_wall = average_close2points(contours_wall, 4)
+    contours_wall = average_close2points(contours_wall, 2)
+
+    for i, contour in enumerate(contours_wall):
         contour = np.array( average_close_points(   contour.reshape(-1, 2), 3))
         # print(contour)\
         x, y, w, h = cv2.boundingRect(contour)
@@ -302,7 +324,7 @@ def process_floor_plan(image_path, border_size=20):
                 and y > border_size + border_margin
                 and (x + w) < (image_width - border_size - border_margin)
                 and (y + h) < (image_height - border_size - border_margin)):
-            filtered_contours.append(contour)
+            filtered_contours_wall.append(contour)
             cv2.drawContours(bordered_image, [contour], 0, (randrange(50,256), randrange(50, 256), randrange(50, 256)), 1)
         # contour_points = contour.reshape(-1, 2)
 
@@ -322,44 +344,44 @@ def process_floor_plan(image_path, border_size=20):
     # print("________________________________________________________________________")
 
     # _________________________________________________________________________________________
-    # # Визуализация промежуточных результатов
-    # debug_images = [
-    #     original_image,
-    #     bordered_image,
-    #     gray_image,
-    #     binary_image,
-    #     cleaned_image,
-    #     processed_image
-    # ]
-    # # Конвертация BGR в RGB для корректного отображения
-    # debug_images_rgb = [cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
-    #                     for img in debug_images]
-    #
-    # titles = [
-    #     'Original Image',
-    #     'Bordered Image',
-    #     'Grayscale',
-    #     'Binary Image',
-    #     'Cleaned Image',
-    #     'processed Image'
-    # ]
-    #
-    # plt.figure(figsize=(15, 10))
-    # for i, (img, title) in enumerate(zip(debug_images_rgb, titles)):
-    #     plt.subplot(2, 3, i + 1)
-    #     plt.imshow(img, cmap='gray' if i > 1 else None)
-    #     plt.title(title)
-    #     plt.axis('off')
-    # plt.tight_layout()
-    # plt.show()
-    # _________________________________________________________________________________________
-    #cv2.imwrite('output.png', cleaned_image)
+    # Визуализация промежуточных результатов
+    debug_images = [
+        original_image,
+        bordered_image,
+        gray_image,
+        binary_image,
+        cleaned_image,
+        processed_image
+    ]
+    # Конвертация BGR в RGB для корректного отображения
+    debug_images_rgb = [cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
+                        for img in debug_images]
 
-    if not filtered_contours:
+    titles = [
+        'Original Image',
+        'Bordered Image',
+        'Grayscale',
+        'Binary Image',
+        'Cleaned Image',
+        'processed Image'
+    ]
+
+    plt.figure(figsize=(15, 10))
+    for i, (img, title) in enumerate(zip(debug_images_rgb, titles)):
+        plt.subplot(2, 3, i + 1)
+        plt.imshow(img, cmap='gray' if i > 1 else None)
+        plt.title(title)
+        plt.axis('off')
+    plt.tight_layout()
+    plt.show()
+    # _________________________________________________________________________________________
+    cv2.imwrite('output.png', cleaned_image)
+
+    if not filtered_contours_wall:
         raise ValueError("Не обнаружено стен. Проверьте параметры обработки изображения.")
 
     # Корректировка координат контуров (удаление рамки)
-    wall_contours = [cnt - border_size for cnt in filtered_contours]
+    wall_contours = [cnt - border_size for cnt in filtered_contours_wall]
 
     # return sorted_corner, (original_height, original_width)
-    return wall_contours, (original_height, original_width), filtered_contours_door, filtered_contours_window, filtered_contours_box, filtered_contours_toilet
+    return wall_contours, (original_height, original_width), filtered_contours1

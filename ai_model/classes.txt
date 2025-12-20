@@ -1,0 +1,21 @@
+Door
+GasPlate
+Wall
+Wardor
+Window
+bathtube
+box
+door_bath
+door_bath_l
+door_double
+door_l
+door_plast
+door_plast_l
+door_vhod
+door_vhod_l
+racovina
+racovina_bath
+setka
+toulet
+washing mashine
+win_in_wall
