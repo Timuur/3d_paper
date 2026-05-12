@@ -51,7 +51,7 @@ class ProcessingWorker(QThread):
             scene.add_geometry(gm1.build_obj(filtered_contours_obj, wall_contours, self.scale))
             # self._add_fallback_furniture(scene, filtered_contours_obj['Unknown'])
 
-            # scene.show()
+            scene.show()
 
             # 4. Финализация
             self.progress.emit("4/4: Оптимизация и подготовка к экспорту...", 100)

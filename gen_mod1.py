@@ -261,7 +261,7 @@ def _load_mesh_safe(path: Path, default_scale: float = 8.0):
         if mesh.is_empty:
             logger.error(f"❌ Пустой меш: {path}")
             return None
-        # mesh.apply_scale(default_scale)
+        mesh.apply_scale(default_scale)
         mesh.fix_normals()
         logger.info(f"✅ Загружен меш: {path.name}, вершин: {len(mesh.vertices)}")
         return mesh
@@ -330,9 +330,9 @@ def build_obj(obj_contours, wall_contours, scale):
             continue
         if obj_mesh[class_o]:
             logging.info(f'Tekuschiq - {class_o}')
-            mesh_obj = _load_mesh_safe(get_file_path(obj_mesh[class_o]), scale)
+            mesh_obj = _load_mesh_safe(get_file_path(obj_mesh[class_o]))
 
-            for i, contour in enumerate(obj_contours):
+            for i, contour in enumerate(obj_contours[class_o]):
                 logger.info(")()()()(try copy mesh)()()()()(")
 
                 mesh = mesh_obj.copy()
@@ -359,8 +359,10 @@ def build_obj(obj_contours, wall_contours, scale):
                     #             ppoint = ponit
                     #             p_ch = True
 
+                logger.info(f")()()()( kontur)()() = ()()({contour}")
+
                 # contour = i2w.average_close_points(contour, 300)
-                contour = np.column_stack((contour, np.zeros(len(contour))))
+                # contour = np.column_stack((contour, np.zeros(len(contour))))
 
                 # Преобразуем контур в массив точек
                 contour_points = np.array(contour[0])
@@ -402,9 +404,9 @@ def build_obj(obj_contours, wall_contours, scale):
                     # # print(hight_win)
                     # # print(scale_win)
                     # mesh.apply_scale([scale_win, 1, 1])
-                    # rot = rotation_matrix(np.pi / 2, [-1, 0, 0])
-                    # transform = concatenate_matrices(matrix_z_inversion, rot)
-                    # mesh.apply_transform(transform)
+                    rot = rotation_matrix(np.pi / 2, [-1, 0, 0])
+                    transform = concatenate_matrices(matrix_z_inversion, rot)
+                    mesh.apply_transform(transform)
                     # # print(transform)
                     # if wight_d < hight_d:
                     #     # 1. Находим его центр (bounding box центроид)
