@@ -6,6 +6,28 @@ from matplotlib import pyplot as plt
 
 from check_img_ai import get_coord
 
+classes_dict = {'Door': [],
+            'GasPlate': [],
+            'Wardor': [],
+            'Wall': [],
+            'Window': [],
+            'bathtube': [],
+            'box': [],
+            'door_bath': [],
+            'cold_box': [],
+            'door-s': [],
+            'door_l': [],
+            'door_balcon': [],
+            'door_bath': [],
+            'h-wall': [],
+            'door_vhod_l': [],
+            'sink': [],
+            'sink_kitchen': [],
+            'balcon_wall': [],
+            'toulet': [],
+            'wash_machine': [],
+            'win_in_wall': []}
+
 def average_close_points(points, threshold=2):
     """
     Усредняет близкие точки в массиве кортежей (x, y).
@@ -203,15 +225,11 @@ def process_floor_plan(image_path, border_size=20):
     # _________________________________________________________________________________________
 
     # class_path_txt = get_file_path('ai_model/classes.txt')
-    classes_dict  = {'Door': [], 'GasPlate': [], 'Wardor': [], 'Wall': [], 'Window': [], 'bathtube': [], 'box': [],
-                     'door_bath': [], 'door_bath_l': [], 'door_double': [], 'door_l': [], 'door_plast': [],
-                     'door_plast_l': [], 'door_vhod': [], 'door_vhod_l': [], 'racovina': [], 'racovina_bath': [],
-                     'setka': [], 'toulet': [], 'washing mashine': [], 'win_in_wall':[]
-                     }
+
 
     detections, labels = get_coord(image_path)
-    print(detections)
-    print(labels)
+    # print(detections)
+    # print(labels)
     for i in range(len(detections)):
         # Get bounding box coordinates
         # Ultralytics returns results in Tensor format, which have to be converted to a regular Python array
@@ -318,7 +336,7 @@ def process_floor_plan(image_path, border_size=20):
 
     for i, contour in enumerate(contours_wall):
         contour = np.array( average_close_points(   contour.reshape(-1, 2), 3))
-        # print(contour)\
+        print(contour)
         x, y, w, h = cv2.boundingRect(contour)
         if (x > border_size + border_margin
                 and y > border_size + border_margin
@@ -344,36 +362,36 @@ def process_floor_plan(image_path, border_size=20):
     # print("________________________________________________________________________")
 
     # _________________________________________________________________________________________
-    # Визуализация промежуточных результатов
-    debug_images = [
-        original_image,
-        bordered_image,
-        gray_image,
-        binary_image,
-        cleaned_image,
-        processed_image
-    ]
-    # Конвертация BGR в RGB для корректного отображения
-    debug_images_rgb = [cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
-                        for img in debug_images]
+    # # Визуализация промежуточных результатов
+    # debug_images = [
+    #     original_image,
+    #     bordered_image,
+    #     gray_image,
+    #     binary_image,
+    #     cleaned_image,
+    #     processed_image
+    # ]
+    # # Конвертация BGR в RGB для корректного отображения
+    # debug_images_rgb = [cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
+    #                     for img in debug_images]
+    #
+    # titles = [
+    #     'Original Image',
+    #     'Bordered Image',
+    #     'Grayscale',
+    #     'Binary Image',
+    #     'Cleaned Image',
+    #     'processed Image'
+    # ]
 
-    titles = [
-        'Original Image',
-        'Bordered Image',
-        'Grayscale',
-        'Binary Image',
-        'Cleaned Image',
-        'processed Image'
-    ]
-
-    plt.figure(figsize=(15, 10))
-    for i, (img, title) in enumerate(zip(debug_images_rgb, titles)):
-        plt.subplot(2, 3, i + 1)
-        plt.imshow(img, cmap='gray' if i > 1 else None)
-        plt.title(title)
-        plt.axis('off')
-    plt.tight_layout()
-    plt.show()
+    # plt.figure(figsize=(15, 10))
+    # for i, (img, title) in enumerate(zip(debug_images_rgb, titles)):
+    #     plt.subplot(2, 3, i + 1)
+    #     plt.imshow(img, cmap='gray' if i > 1 else None)
+    #     plt.title(title)
+    #     plt.axis('off')
+    # plt.tight_layout()
+    # plt.show()
     # _________________________________________________________________________________________
     cv2.imwrite('output.png', cleaned_image)
 

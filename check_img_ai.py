@@ -5,11 +5,12 @@ import cv2
 
 from gen_mod1 import get_file_path
 
-obj_path_ai = get_file_path('ai_model/model_v2.pt')
-#obj_path_ai = gen1.get_file_path('ai_model/my_model_old.pt')
+obj_path_ai = get_file_path('ai_model/my_model.pt')
+# obj_path_ai = get_file_path('ai_model/mode_v3.pt')
+# obj_path_ai = gen1.get_file_path('ai_model/my_model_old.pt')
 
 # # Define path to model and other user variables
-# model_path = 'ai_model/model_v2.pt'  # Path to model
+# model_path = 'ai_model/my_model.pt'  # Path to model
 # min_thresh = 0.50                      # Minimum detection threshold
 #
 # # Check if model file exists and is valid
@@ -21,7 +22,7 @@ obj_path_ai = get_file_path('ai_model/model_v2.pt')
 # model = YOLO(model_path, task='detect')
 # labels = model.names
 #
-# frame = cv2.imread('test/0010.jpg')
+# frame = cv2.imread('img/test/test_change/2/01.png')
 #
 # # Set bounding box colors (using the Tableu 10 color scheme)
 # bbox_colors = [(164,120,87), (68,148,228), (93,97,209), (178,182,133), (88,159,106),
@@ -31,12 +32,6 @@ obj_path_ai = get_file_path('ai_model/model_v2.pt')
 #
 # # Extract results
 # detections = results[0].boxes
-#
-# # # Initialize variable to hold every candy detected in this frame
-# # candies_detected = []
-# # window = []
-# # door = []
-# # toilet = []
 #
 # # Go through each detection and get bbox coords, confidence, and class
 # for i in range(len(detections)):
