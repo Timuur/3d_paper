@@ -3,19 +3,16 @@ GasPlate
 Wall
 Wardor
 Window
+balcon_wall
 bathtube
 box
+cold_box
+door-s
+door_balcon
 door_bath
-door_bath_l
-door_double
-door_l
-door_plast
-door_plast_l
-door_vhod
-door_vhod_l
-racovina
-racovina_bath
-setka
+h-wall
+sink
+sink_kitchen
 toulet
-washing mashine
+wash_machine
 win_in_wall

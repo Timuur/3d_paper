@@ -241,32 +241,38 @@ from trimesh.transformations import rotation_matrix, concatenate_matrices
 from shapely.geometry import Polygon
 
 import logging
-logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
-logger = logging.getLogger(__name__)
+
+from check_ddor import extract_wall_segments_with_ids, find_true_opening_center
+
+# logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
+# logger = logging.getLogger(__name__)
 
 def get_file_path(filename: str) -> Path:
     base_path = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path(__file__).parent
     return base_path / filename
 
-obj_path_door = get_file_path("3d_obj_test/Door_Component.obj")
-obj_path_win = get_file_path("3d_obj_test/window1.obj")
-
-mesh_door = trimesh.load(obj_path_door)
-mesh_window = trimesh.load(obj_path_win)
+# obj_path_door = get_file_path("3d_obj_test/Door_Component.obj")
+# obj_path_win = get_file_path("3d_obj_test/window1.obj")
+#
+# mesh_door = trimesh.load(obj_path_door)
+# mesh_window = trimesh.load(obj_path_win)
 
 def _load_mesh_safe(path: Path, default_scale: float = 8.0):
     """Безопасная загрузка меша с валидацией."""
     try:
         mesh = trimesh.load(path, force='mesh')
         if mesh.is_empty:
-            logger.error(f"❌ Пустой меш: {path}")
+            # logger.error(f"❌ Пустой меш: {path}")
+            print(f"❌ Пустой меш: {path}")
             return None
         mesh.apply_scale(default_scale)
         mesh.fix_normals()
-        logger.info(f"✅ Загружен меш: {path.name}, вершин: {len(mesh.vertices)}")
+        # logger.info(f"✅ Загружен меш: {path.name}, вершин: {len(mesh.vertices)}")
+        print(f"✅ Загружен меш: {path.name}, вершин: {len(mesh.vertices)}")
         return mesh
     except Exception as e:
-        logger.error(f"❌ Ошибка загрузки {path}: {e}")
+        # logger.error(f"❌ Ошибка загрузки {path}: {e}")
+        print(f"❌ Ошибка загрузки {path}: {e}")
         return None
 
 # Door_MESH = _load_mesh_safe(get_file_path())
@@ -279,21 +285,21 @@ obj_mesh = {'Door': "3d_obj_test/Door_Component.obj",
             'GasPlate': "3d_obj_test/Separate_assets_obj/kitchen_table_001.obj",
             'Wardor': "",
             'Wall': "",
-            'Window': "3d_obj_test/window1.obj",
-            'bathtube': "",
+            'Window': "3d_obj_test/3d models/windows_1sector.obj",
+            # 'Window': "3d_obj_test/3d models/window1.obj",
+            'bathtube': "3d_obj_test/OBJ/bath.obj",
             'box': "3d_obj_test/Separate_assets_obj/box_001.obj",
-            'door_bath': "",
             'cold_box': "3d_obj_test/Separate_assets_obj/fridge_001.obj",
             'door-s': "",
             'door_l': "",
             'door_balcon': "",
-            'door_bath': "",
+            'door_bath': "3d_obj_test/Separate_assets_obj/door_001.obj",
             'h-wall': "",
             'door_vhod_l': "",
-            'sink': "",
+            'sink': "3d_obj_test/OBJ/sink.obj",
             'sink_kitchen': "3d_obj_test/Separate_assets_obj/kitchen_sink_001.obj",
             'balcon_wall': "",
-            'toulet': "3d_obj_test/Separate_assets_obj/bathroom_item_001.obj",
+            'toulet': "3d_obj_test/OBJ/toilet.obj",
             'wash_machine': "3d_obj_test/Separate_assets_obj/washing_machine_001.obj",
             'win_in_wall': ""
 }
@@ -323,7 +329,7 @@ def gen_floor(objects):
 
 def build_obj(obj_contours, wall_contours, scale):
     scene_objects = []
-    logging.info(f'Всё - {obj_contours}')
+    # logging.info(f'Всё - {obj_contours}')
 
     for t, class_o in enumerate(obj_contours):
         if (class_o == "Door" or class_o == "Window"):
@@ -333,10 +339,11 @@ def build_obj(obj_contours, wall_contours, scale):
             mesh_obj = _load_mesh_safe(get_file_path(obj_mesh[class_o]))
 
             for i, contour in enumerate(obj_contours[class_o]):
-                logger.info(")()()()(try copy mesh)()()()()(")
+                # logger.info(")()()()(try copy mesh)()()()()(")
+                # print(")()()()(try copy mesh)()()()()(")
 
                 mesh = mesh_obj.copy()
-                logger.info(")()()()( copy pass mesh)()()()()(")
+                # print(")()()()( copy pass mesh)()()()()(")
 
                 # wight_d = contour[2][0] - contour[0][0]
                 # hight_d = contour[1][1] - contour[0][1]
@@ -359,20 +366,20 @@ def build_obj(obj_contours, wall_contours, scale):
                     #             ppoint = ponit
                     #             p_ch = True
 
-                logger.info(f")()()()( kontur)()() = ()()({contour}")
+                # print(f")()()()( kontur)()() = ()()({contour}")
 
                 # contour = i2w.average_close_points(contour, 300)
                 # contour = np.column_stack((contour, np.zeros(len(contour))))
 
                 # Преобразуем контур в массив точек
                 contour_points = np.array(contour[0])
-                print(contour_points)
+                # print(contour_points)
                 # print(ppoint)
 
                 # Масштабируем координаты
                 scaled = contour_points * float(scale)
                 # ppoint_s = ppoint * float(scale)
-                print(scaled)
+                # print(scaled)
                 # print(ppoint_s)
                 # if wight_d > hight_d and p_ch:
                 #     scaled = scaled[0], ppoint_s[1], scaled[2]
@@ -431,14 +438,14 @@ def build_obj(obj_contours, wall_contours, scale):
                     # box.apply_transform(matrix_z_inversion)
                     #
                     # # Добавляем в сцену
-                    logger.info(")()()()(try add mesh)()()()()(")
+                    # print(")()()()(try add mesh)()()()()(")
                     scene_objects.append(mesh)
                     # scene_objects.append(box)
 
-                    print(f"Контур DOOR #{i + 1} успешно преобразован в 3D-объект")
+                    print(f"Контур {class_o} #{i + 1} успешно преобразован в 3D-объект")
 
                 except Exception as e:
-                    print(f"Ошибка обработки контура DOOR #{i + 1}: {str(e)}")
+                    print(f"Ошибка обработки контура {class_o} #{i + 1}: {str(e)}")
                     continue
     return scene_objects
 
@@ -470,6 +477,8 @@ def build_obj(obj_contours, wall_contours, scale):
 
 def build_door(door_contours, wall_contours, scale, height = 2.7):
     scene_objects = []
+    segments = extract_wall_segments_with_ids(wall_contours)
+    mesh_door = _load_mesh_safe(get_file_path(obj_mesh['Door']), 1)
     for i, contour in enumerate(door_contours):
         mesh = mesh_door.copy()
         wight_d = contour[2][0] - contour[0][0]
@@ -552,7 +561,38 @@ def build_door(door_contours, wall_contours, scale, height = 2.7):
                 mesh.apply_transform(rotation)
 
                 # 4. Возвращаем на исходную позицию
+                # print(f"центр пов{center}")
                 mesh.apply_translation(center)
+
+            # Находим центр двери (в пикселях)
+            door_center_px = np.array([
+                (contour[:, 0].min() + contour[:, 0].max()) / 2,
+                (contour[:, 1].min() + contour[:, 1].max()) / 2
+            ])
+
+            # === 2. Привязка к проёму в стене ===
+            result = find_true_opening_center(door_center_px, segments, search_radius=300)
+
+            if result:
+                # Используем центр проёма, а не детектированный центр двери
+                final_center_px = np.array(result['center_px'])
+                door_angle_rad = np.radians(result['angle_deg'])
+                opening_width_px = result['opening_width_px']
+                # print(f"Дверь #{i + 1}: центр проёма {final_center_px}, Ширина проёма: {opening_width_px}, угол {door_angle_rad}°")
+            else:
+                # Если проём не найден, используем центр детектированной двери
+                final_center_px = door_center_px
+                door_angle_rad = 0
+                opening_width_px = wight_d
+                # print(f"Дверь #{i + 1}: проём не найден, используем детектированный центр")
+                # print(f"Дверь #{i + 1}: центр проёма {final_center_px}, Ширина проёма: {opening_width_px}, угол {door_angle_rad}°")
+
+            # === 3. Масштабирование в мировые координаты ===
+            final_center_world = final_center_px * float(scale)
+            door_width_world = wight_d * float(scale)
+            door_height_world = hight_d * float(scale)
+            # print(f"Дверь #{i + 1}: центр проёма {final_center_world}, Ширина проёма: {door_width_world}, hight {door_height_world}°")
+
 
             hight_door = mesh.extents.tolist()
             # print(hight_door)
@@ -575,6 +615,7 @@ def build_door(door_contours, wall_contours, scale, height = 2.7):
 
 def build_window(window_position, wall_contours, scale, height = 2.7):
     scene_objects = []
+    mesh_window = _load_mesh_safe(get_file_path(obj_mesh['Window']), 1)
     for i, contour in enumerate(window_position):
         win_mesh = mesh_window.copy()
         wight_d = contour[2][0] - contour[0][0]
@@ -785,8 +826,8 @@ def build_3d_model(wall_contours, scale=0.1, height=3.0):
         try:
             # Создаём 2D полигон
             polygon = trimesh.path.polygons.Polygon(scaled)
-            print("стена = ",scaled)
-            print("dscjnf стена = ", height)
+            # print("стена = ",scaled)
+            # print("dscjnf стена = ", height)
 
             # Экструдируем в 3D
             mesh = trimesh.creation.extrude_polygon(polygon, height=height)

@@ -89,7 +89,7 @@ obj_path_ai = get_file_path('ai_model/my_model.pt')
 def get_coord(img):
     # Define path to model and other user variables
     model_path = obj_path_ai # Path to model
-    # min_thresh = 0.50  # Minimum detection threshold
+    # min_thresh = 0.250  # Minimum detection threshold
 
     # Check if model file exists and is valid
     if (not os.path.exists(model_path)):

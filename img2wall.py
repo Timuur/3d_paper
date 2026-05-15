@@ -283,6 +283,10 @@ def process_floor_plan(image_path, border_size=20):
     # Поиск контуров
     contours_wall, _ = cv2.findContours(processed_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
+    # for i in contours_wall:
+    #     x, y = i.ravel()
+    #     cv2.circle(processed_image, (x, y), 3, (255, 0, 0), -1)  # Красный цвет в RGB
+
     # Фильтрация контуров рамки
     filtered_contours_wall = []
     border_margin = -10
@@ -362,16 +366,16 @@ def process_floor_plan(image_path, border_size=20):
     # print("________________________________________________________________________")
 
     # _________________________________________________________________________________________
-    # # Визуализация промежуточных результатов
-    # debug_images = [
-    #     original_image,
-    #     bordered_image,
-    #     gray_image,
-    #     binary_image,
-    #     cleaned_image,
-    #     processed_image
-    # ]
-    # # Конвертация BGR в RGB для корректного отображения
+    # Визуализация промежуточных результатов
+    debug_images = [
+        original_image,
+        bordered_image,
+        gray_image,
+        binary_image,
+        cleaned_image,
+        processed_image
+    ]
+    # Конвертация BGR в RGB для корректного отображения
     # debug_images_rgb = [cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
     #                     for img in debug_images]
     #
@@ -383,7 +387,7 @@ def process_floor_plan(image_path, border_size=20):
     #     'Cleaned Image',
     #     'processed Image'
     # ]
-
+    #
     # plt.figure(figsize=(15, 10))
     # for i, (img, title) in enumerate(zip(debug_images_rgb, titles)):
     #     plt.subplot(2, 3, i + 1)
@@ -392,8 +396,8 @@ def process_floor_plan(image_path, border_size=20):
     #     plt.axis('off')
     # plt.tight_layout()
     # plt.show()
-    # _________________________________________________________________________________________
-    cv2.imwrite('output.png', cleaned_image)
+    # # _________________________________________________________________________________________
+    # cv2.imwrite('output.png', cleaned_image)
 
     if not filtered_contours_wall:
         raise ValueError("Не обнаружено стен. Проверьте параметры обработки изображения.")
