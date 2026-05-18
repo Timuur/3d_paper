@@ -257,6 +257,24 @@ def get_file_path(filename: str) -> Path:
 # mesh_door = trimesh.load(obj_path_door)
 # mesh_window = trimesh.load(obj_path_win)
 
+
+def clear_cache():
+    """Очистка кэшей генератора 3D"""
+    import gc
+
+    # Очистка внутреннего кэша trimesh (если доступен)
+    if hasattr(trimesh, 'cache') and hasattr(trimesh.cache, 'clear'):
+        trimesh.cache.clear()
+
+    # Также можно очистить кэш загрузчиков
+    if hasattr(trimesh.exchange, 'load') and hasattr(trimesh.exchange.load, '_mesh_loaders'):
+        # Не трогаем напрямую, но можно пересоздать сцену
+        pass
+
+    # Принудительный сборщик мусора для крупных объектов
+    gc.collect()
+
+
 def _load_mesh_safe(path: Path, default_scale: float = 8.0):
     """Безопасная загрузка меша с валидацией."""
     try:
@@ -285,8 +303,8 @@ obj_mesh = {'Door': "3d_obj_test/Door_Component.obj",
             'GasPlate': "3d_obj_test/Separate_assets_obj/kitchen_table_001.obj",
             'Wardor': "",
             'Wall': "",
-            'Window': "3d_obj_test/3d models/windows_1sector.obj",
-            # 'Window': "3d_obj_test/3d models/window1.obj",
+            # 'Window': "3d_obj_test/3d models/windows_1sector.obj",
+            'Window': "3d_obj_test/window1.obj",
             'bathtube': "3d_obj_test/OBJ/bath.obj",
             'box': "3d_obj_test/Separate_assets_obj/box_001.obj",
             'cold_box': "3d_obj_test/Separate_assets_obj/fridge_001.obj",

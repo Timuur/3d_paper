@@ -4,7 +4,12 @@ from random import randrange
 
 from matplotlib import pyplot as plt
 
-from check_img_ai import get_coord
+from check_img_ai_v2 import get_coord
+
+# import functools
+# def clear_cache():
+#     """Сброс всех внутренних кэшей и глобальных состояний"""
+#     _cached_detection.cache_clear()
 
 classes_dict = {'Door': [],
             'GasPlate': [],
@@ -155,6 +160,28 @@ def apply_adaptive_threshold(gray_image):
 
 #______________________________________________________________________________________________________________________
 
+def clear_cache():
+    """Полный сброс состояния модуля img2wall"""
+    global classes_dict
+
+    # 1. Очистка основного источника "кэша"
+    for key in classes_dict:
+        classes_dict[key] = []
+
+    # 2. Безопасная очистка кэша нейросети
+    try:
+        from check_img_ai_v2 import cache_clear as cache_clear_ii
+        cache_clear_ii()
+    except:
+        pass
+
+    # 3. Сброс окон OpenCV (если были открыты)
+    try:
+        import cv2
+        cv2.destroyAllWindows()
+    except:
+        pass
+
 def replace_gray_in_monochrome(image, lower_gray=39, upper_gray=255, target_value=255):
     """
     Заменяет диапазон серых пикселей в монохромном изображении на белые.
@@ -217,6 +244,12 @@ def process_floor_plan(image_path, border_size=20):
     :return: Контуры стен и исходные размеры изображения
     """
     # _________________________________________________________________________________________
+
+    global classes_dict
+    for key in classes_dict:
+        classes_dict[key] = []
+    #TODO:Фабрика свежего словаря классов на основе классов ии
+
     # Загрузка изображения и предобработка
     original_image = cv2.imread(image_path)
 

@@ -391,6 +391,9 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "Выберите план", "", "Images (*.png *.jpg *.jpeg *.bmp)")
         if not path: return
 
+        if hasattr(i2w, 'process_floor_plan') and hasattr(i2w.process_floor_plan, 'cache_clear'):
+            i2w.process_floor_plan.cache_clear()
+
         self._plan_path = path
         self.current_scene = None  # Сбрасываем старую 3D-модель
 
@@ -428,6 +431,11 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("ℹ️ Список областей уже пуст", 2000)
             return
 
+        if hasattr(i2w, 'clear_cache'):
+            i2w.clear_cache()
+        if hasattr(gm1, 'clear_cache'):
+            gm1.clear_cache()
+
         self.editor_2d.reset_editor()  # Вызывает ваш готовый сброс
         self.btn_save.setEnabled(False)
         self.statusBar().showMessage("🗑 Все области удалены, сценарий сброшен", 2000)
@@ -442,12 +450,17 @@ class MainWindow(QMainWindow):
                 rebuilt[cls] = []
             # gm1 ожидает numpy-массивы, поэтому конвертируем list -> np.array
             rebuilt[cls].append(np.array(item['coords'], dtype=np.float32))
+        print(f'len = {len(rebuilt)}')
         return rebuilt
 
     def _start_processing(self):
         if not hasattr(self, '_plan_path'):
             QMessageBox.warning(self, "Внимание", "Сначала выберите план!")
             return
+
+        if hasattr(self, 'worker') and self.worker.isRunning():
+            self.worker.terminate()
+            self.worker.wait()
 
         # 🔑 Собираем актуальные данные из 2D-редактора
         edited_regions = self._rebuild_regions_dict()
