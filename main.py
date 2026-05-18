@@ -1,11 +1,12 @@
 import sys
 import os
 import time
-from PySide6.QtWidgets import *
-from PySide6.QtCore import Qt, Signal, QRectF, QPointF
-from PySide6.QtCore import QThread, Signal, Qt
-from PySide6.QtGui import QPixmap, QPainter, QPen, QBrush, QPolygonF, QColor, QCursor
 from typing import Optional
+import numpy as np
+
+from PySide6.QtWidgets import *
+from PySide6.QtCore import Qt, Signal, QRectF, QPointF, QThread
+from PySide6.QtGui import QPixmap, QPainter, QPen, QBrush, QPolygonF, QColor, QCursor
 
 import trimesh
 import pyvista as pv
@@ -20,36 +21,37 @@ class ProcessingWorker(QThread):
     finished = Signal(object)
     error = Signal(str)
 
-    def __init__(self, plan_path: str, scale: float, wall_height: float, edited_regions: Optional[dict] = None):
+    def __init__(self, plan_path: str, scale: float, wall_height: float,
+                 edited_regions: Optional[dict] = None, use_ai_walls: bool = False):
         super().__init__()
         self.plan_path = plan_path
         self.scale = scale
         self.wall_height = wall_height * 7.14  # коэффициент масштабирования
         self.edited_regions: Optional[dict] = edited_regions
+        self.use_ai_walls = use_ai_walls  # 🔧 FIX: принимаем состояние переключателя
 
     def run(self):
         try:
             # 1. Анализ плана
             self.progress.emit("1/4: Анализ плана нейросетью...", 20)
-            # (wall_contours, image_size, _) = i2w.process_floor_plan(self.plan_path)
-
             wall_contours_cv, image_size, raw_contours = i2w.process_floor_plan(self.plan_path)
-
-            # Если пользователь правил области в GUI → используем их, иначе → сырой ИИ-вывод
             contours = self.edited_regions if self.edited_regions else raw_contours
 
+            # 🔧 FIX: логика выбора контуров на основе переключателя
+            if self.use_ai_walls:
+                wall_contours = contours.get('Wall', raw_contours.get('Wall', []))
+            else:
+                # Если пользователь правил области → используем их, иначе → фоллбэк на ИИ
+                wall_contours = wall_contours_cv
+
             # Стены часто нужны отдельно для построения геометрии
-            # if wall_contours_cv:
-            #     wall_contours = wall_contours_cv
-            # else:
-            #     wall_contours = contours.get('Wall', raw_contours.get('Wall', []))
-            wall_contours = contours.get('Wall', raw_contours.get('Wall', []))
             h_wall_contours = contours.get('h-wall', raw_contours.get('h-wall', []))
 
             # 2. Генерация стен
             self.progress.emit("2/4: Построение 3D-геометрии стен...", 45)
             scene = gm1.build_3d_model(wall_contours, self.scale, self.wall_height)
-            scene.add_geometry(gm1.build_3d_model(h_wall_contours, self.scale, self.wall_height))
+            if h_wall_contours:
+                scene.add_geometry(gm1.build_3d_model(h_wall_contours, self.scale, self.wall_height))
 
             # 3. Проёмы и мебель
             self.progress.emit("3/4: Расстановка проёмов и мебели...", 75)
@@ -57,15 +59,16 @@ class ProcessingWorker(QThread):
                 scene.add_geometry(gm1.build_door(contours['Door'], wall_contours, self.scale, self.wall_height))
             if 'Window' in contours:
                 scene.add_geometry(gm1.build_window(contours['Window'], wall_contours, self.scale, self.wall_height))
-            # Остальные объекты (GasPlate, sink, box, toulet и т.д.)
+
             scene.add_geometry(gm1.build_obj(contours, wall_contours, self.scale))
 
-            # 4. Финализация (scene.show() убран, чтобы не блокировать GUI)
+            # 4. Финализация
             self.progress.emit("4/4: Оптимизация и подготовка...", 100)
             self.finished.emit(scene)
 
         except Exception as e:
             self.error.emit(str(e))
+
 
 # ================= 2D РЕДАКТОР ПЛАНА =================
 class EditableRegionItem(QGraphicsObject):
@@ -74,7 +77,8 @@ class EditableRegionItem(QGraphicsObject):
 
     def __init__(self, polygon: list, region_class: str = "Unknown", parent=None):
         super().__init__(parent)
-        self.setFlags(QGraphicsItem.ItemIsMovable | QGraphicsItem.ItemIsSelectable | QGraphicsItem.ItemSendsGeometryChanges)
+        self.setFlags(
+            QGraphicsItem.ItemIsMovable | QGraphicsItem.ItemIsSelectable | QGraphicsItem.ItemSendsGeometryChanges)
         self.setAcceptHoverEvents(True)
         self.region_class = region_class
         self.drag_index = -1
@@ -90,12 +94,15 @@ class EditableRegionItem(QGraphicsObject):
         return QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
 
     def paint(self, painter: QPainter, option, widget):
-        base_color = QColor("#00b8ff"); base_color.setAlpha(60)
-        sel_color = QColor("#ffcc00"); sel_color.setAlpha(80)
+        base_color = QColor("#00b8ff");
+        base_color.setAlpha(60)
+        sel_color = QColor("#ffcc00");
+        sel_color.setAlpha(80)
         is_selected = self.isSelected()
         brush = QBrush(sel_color if is_selected else base_color)
         pen = QPen(QColor("#ffcc00" if is_selected else "#00b8ff"), 2)
-        painter.setPen(pen); painter.setBrush(brush)
+        painter.setPen(pen);
+        painter.setBrush(brush)
         painter.drawPolygon(QPolygonF(self.points))
         painter.setPen(QPen(QColor("#ffffff"), 1))
         painter.setBrush(QBrush(QColor("#00ff88")))
@@ -123,29 +130,24 @@ class EditableRegionItem(QGraphicsObject):
         if event.button() == Qt.LeftButton:
             self.drag_index = self._find_closest_handle(event.pos())
             if self.drag_index != -1:
-                # Тянем за угол: курсор меняется, super() НЕ вызываем (блокируем перемещение всей области)
                 self.setCursor(Qt.SizeAllCursor)
             else:
-                # Кликнули в тело: делегируем Qt стандартное перемещение объекта
                 super().mousePressEvent(event)
         else:
             super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         if self.drag_index != -1:
-            # Перемещение вершины с привязкой к пикселям
             pos = event.pos()
             self.points[self.drag_index] = QPointF(round(pos.x()), round(pos.y()))
             self.prepareGeometryChange()
         else:
-            # Перемещение всей области средствами Qt
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         self.drag_index = -1
         self.unsetCursor()
         self.update()
-        # Экспорт ВСЕГДА в глобальных координатах сцены (учитывает и pos() объекта, и локальные вершины)
         coords = [(round(self.mapToScene(p).x(), 2), round(self.mapToScene(p).y(), 2)) for p in self.points]
         self.region_modified.emit(coords, self.region_class)
         super().mouseReleaseEvent(event)
@@ -169,7 +171,6 @@ class EditableRegionItem(QGraphicsObject):
 
 
 class PlanEditorView(QGraphicsView):
-    """Виджет для отображения и редактирования 2D-плана"""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.scene = QGraphicsScene(self)
@@ -185,7 +186,6 @@ class PlanEditorView(QGraphicsView):
         self.regions: list[EditableRegionItem] = []
 
     def set_background(self, image_path: str):
-        # Очистка уже выполнена в reset_editor(), загружаем только новый фон
         pixmap = QPixmap(image_path)
         if not pixmap.isNull():
             self.scene.addPixmap(pixmap)
@@ -197,8 +197,6 @@ class PlanEditorView(QGraphicsView):
             win.statusBar().showMessage("📐 Новый план загружен", 2000)
 
     def reset_editor(self):
-        """Полный сброс данных, сцены и сигналов"""
-        # 🔑 Безопасное отключение сигналов (защита от крэша при повторном вызове)
         for item in self.regions:
             try:
                 item.region_deleted.disconnect(self._on_region_deleted)
@@ -209,9 +207,9 @@ class PlanEditorView(QGraphicsView):
             except:
                 pass
 
-        self.regions.clear()  # Очищаем Python-список
-        self.scene.clear()  # Очищаем Qt-сцену
-        self.add_mode = False  # Выключаем режим рисования
+        self.regions.clear()
+        self.scene.clear()
+        self.add_mode = False
         self.rect_start = None
         self.temp_rect = None
 
@@ -228,7 +226,6 @@ class PlanEditorView(QGraphicsView):
         self.regions.append(item)
 
     def _on_region_deleted(self, item: EditableRegionItem):
-        """Синхронизирует список данных при удалении области"""
         if item in self.regions:
             self.regions.remove(item)
         win = self.window()
@@ -248,7 +245,8 @@ class PlanEditorView(QGraphicsView):
     def mouseMoveEvent(self, event):
         if self.add_mode and self.rect_start:
             if not self.temp_rect:
-                self.temp_rect = QGraphicsRectItem(self.scene)
+                self.temp_rect = QGraphicsRectItem()
+                self.scene.addItem(self.temp_rect)
                 self.temp_rect.setPen(QPen(Qt.DashLine))
             end = self.mapToScene(event.pos())
             self.temp_rect.setRect(QRectF(self.rect_start, end).normalized())
@@ -272,145 +270,182 @@ class PlanEditorView(QGraphicsView):
             win.statusBar().showMessage(f"📐 Координаты обновлены: {coords[0]}", 2000)
 
     def get_regions_data(self) -> list[dict]:
-        """Экспорт всех областей с координатами, привязанными к фону изображения"""
         return [
             {
-                # 🔑 FIX: item.mapToScene() корректно работает с QPointF
                 "coords": [(round(item.mapToScene(p).x(), 2), round(item.mapToScene(p).y(), 2)) for p in item.points],
                 "class": item.region_class
             }
             for item in self.regions
         ]
 
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("План → 3D Модель")
-        self.resize(1400, 900)
+        self.setWindowTitle("Генератор 3D Планировок")
+        self.resize(1500, 900)
         self.current_scene = None
+
+        # Проверка конфигов при старте
+        if not gm1.obj_mesh:
+            QMessageBox.warning(
+                self, "⚠️ Конфигурация не загружена",
+                "Файл config/mesh_paths.json не найден.\n3D-мебли не будет."
+            )
+
         self._setup_ui()
 
     def _setup_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(8, 8, 8, 8)
-        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(5)
 
-        # ================= ВЕРХНЯЯ ПАНЕЛЬ: ОРГАНЫ УПРАВЛЕНИЯ =================
-        ctrl_widget = QWidget()
-        ctrl_layout = QHBoxLayout(ctrl_widget)
-        ctrl_layout.setContentsMargins(5, 5, 5, 5)
+        # ================= ВЕРХНЯЯ ПАНЕЛЬ УПРАВЛЕНИЯ =================
+        controls_container = QFrame()
+        controls_container.setFrameShape(QFrame.StyledPanel)
+        controls_container.setStyleSheet("QFrame { background: #f0f0f0; border-radius: 4px; padding: 5px; }")
 
-        # 1. Выбор файла
-        file_layout = QVBoxLayout()
-        btn_open = QPushButton("📂 Выбрать план")
+        controls_layout = QVBoxLayout(controls_container)
+        controls_layout.setContentsMargins(5, 5, 5, 5)
+        controls_layout.setSpacing(5)
+
+        # --- 1. Строка инструментов (Файл + Режимы) ---
+        tools_layout = QHBoxLayout()
+
+        btn_open = QPushButton("📂 Загрузить план")
         btn_open.clicked.connect(self._select_plan)
-        btn_open.setMinimumHeight(35)
-        file_layout.addWidget(btn_open)
-        file_layout.addStretch()
+        btn_open.setStyleSheet("font-weight: bold;")
+        tools_layout.addWidget(btn_open, 0)  # Не растягивать
 
-        # 2. Параметры
-        params_layout = QFormLayout()
+        tools_layout.addSpacing(10)
+
+        self.btn_add_region = QPushButton("➕ Рисовать")
+        self.btn_add_region.setCheckable(True)
+        self.btn_add_region.clicked.connect(self._toggle_add_mode)
+        tools_layout.addWidget(self.btn_add_region)
+
+        self.btn_type_wall = QCheckBox("🤖 Стены от ИИ (сырые)")
+        self.btn_type_wall.setChecked(True)
+        self.btn_type_wall.toggled.connect(self._toggle_wall_mode)
+        tools_layout.addWidget(self.btn_type_wall)
+
+        tools_layout.addStretch()
+        controls_layout.addLayout(tools_layout)
+
+        # --- 2. Строка параметров и действий ---
+        params_actions_layout = QHBoxLayout()
+
+        # Группа параметров
+        params_group = QGroupBox("Параметры")
+        params_group_layout = QHBoxLayout(params_group)
+        params_group_layout.setContentsMargins(5, 5, 5, 5)
+
         self.input_scale = QDoubleSpinBox()
-        self.input_scale.setRange(0.001, 1.0)
+        self.input_scale.setRange(0.001, 5.0)
         self.input_scale.setValue(0.05)
         self.input_scale.setDecimals(3)
-        params_layout.addRow("Масштаб (см/пиксель):", self.input_scale)
+        params_group_layout.addWidget(QLabel("Масштаб:"))
+        params_group_layout.addWidget(self.input_scale)
+
+        params_group_layout.addSpacing(10)
 
         self.input_height = QDoubleSpinBox()
         self.input_height.setRange(0.5, 10.0)
         self.input_height.setValue(2.8)
-        self.input_height.setDecimals(1)
-        params_layout.addRow("Высота стен (м):", self.input_height)
+        self.input_height.setDecimals(2)
+        params_group_layout.addWidget(QLabel("Высота:"))
+        params_group_layout.addWidget(self.input_height)
 
-        self.btn_add_region = QPushButton("➕ Добавить область")
-        self.btn_add_region.setCheckable(True)
-        self.btn_add_region.clicked.connect(self._toggle_add_mode)
-        self.btn_add_region.setMinimumHeight(35)
-        ctrl_layout.addWidget(self.btn_add_region)
+        params_actions_layout.addWidget(params_group, 0)  # Фиксированный размер
 
-        # 3. Прогресс и действия
-        action_layout = QVBoxLayout()
-        self.progress_label = QLabel("Готово к работе")
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setMinimumHeight(25)
+        params_actions_layout.addStretch()
 
-        self.btn_run = QPushButton("▶ Создать модель")
+        # Группа кнопок действий
+        actions_group = QHBoxLayout()
+
+        self.btn_run = QPushButton("▶ СОЗДАТЬ")
         self.btn_run.clicked.connect(self._start_processing)
-        self.btn_run.setMinimumHeight(35)
+        self.btn_run.setStyleSheet(
+            "background-color: #2196F3; color: white; font-weight: bold; padding: 5px 15px; border-radius: 3px;")
+        actions_group.addWidget(self.btn_run)
 
-        self.btn_save = QPushButton("💾 Сохранить OBJ")
+        self.btn_save = QPushButton("💾 OBJ")
         self.btn_save.setEnabled(False)
         self.btn_save.clicked.connect(self._export_obj)
-        self.btn_save.setMinimumHeight(35)
+        actions_group.addWidget(self.btn_save)
 
-        # 🔑 КНОПКА ОЧИСТКИ
-        self.btn_clear = QPushButton("🗑 Очистить всё")
+        self.btn_clear = QPushButton("🗑 Очистить")
         self.btn_clear.clicked.connect(self._clear_all)
-        self.btn_clear.setMinimumHeight(35)
-        self.btn_clear.setStyleSheet("background-color: #c62828; color: white; font-weight: bold;")
+        self.btn_clear.setStyleSheet("background-color: #ef5350; color: white; font-weight: bold;")
+        actions_group.addWidget(self.btn_clear)
 
-        action_layout.addWidget(self.progress_label)
-        action_layout.addWidget(self.progress_bar)
-        action_layout.addWidget(self.btn_run)
-        action_layout.addWidget(self.btn_save)
-        action_layout.addWidget(self.btn_clear)  # ← Добавлено
+        params_actions_layout.addLayout(actions_group)
+        controls_layout.addLayout(params_actions_layout)
 
-        # Собираем верхнюю панель
-        ctrl_layout.addLayout(file_layout, 1)
-        ctrl_layout.addLayout(params_layout, 1)
-        ctrl_layout.addLayout(action_layout, 2)
-        main_layout.addWidget(ctrl_widget)
+        # --- 3. Статусная панель (Прогресс) ---
+        status_panel = QWidget()
+        status_panel.setStyleSheet("background: #e0e0e0; border-radius: 3px;")
+        status_layout = QHBoxLayout(status_panel)
+        status_layout.setContentsMargins(8, 2, 8, 2)
 
-        # ================= НИЖНЯЯ ПАНЕЛЬ: ПРЕДПРОСМОТР (2D | 3D) =================
+        self.progress_label = QLabel("🟢 Готов к работе")
+        self.progress_label.setStyleSheet("font-weight: bold; color: #333;")
+        status_layout.addWidget(self.progress_label, 0)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("%v%")
+        self.progress_bar.setStyleSheet(
+            "QProgressBar { border: 1px solid #ccc; border-radius: 3px; text-align: center; }")
+        status_layout.addWidget(self.progress_bar, 1)  # Растягивается
+
+        controls_layout.addWidget(status_panel)
+
+        main_layout.addWidget(controls_container)
+
+        # ================= НИЖНЯЯ ПАНЕЛЬ (ПРЕДПРОСМОТР) =================
         self.preview_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.preview_splitter.setChildrenCollapsible(False)
+        self.preview_splitter.setStyleSheet("QSplitter::handle { background: #888; width: 3px; }")
 
-        # Левая часть: 2D изображение
-        # self.preview_label = QLabel("Предпросмотр не выбран")
-        # self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # self.preview_label.setStyleSheet("background: #2a2a2a; border: 1px solid #444; border-radius: 4px;")
-        # self.preview_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        # self.preview_splitter.addWidget(self.preview_label)
-
+        # 2D Редактор
         self.editor_2d = PlanEditorView(self)
         self.preview_splitter.addWidget(self.editor_2d)
 
-        # Правая часть: 3D вьюпорт
+        # 3D Вьюпорт
         self.plotter = QtInteractor(self)
         self.plotter.set_background("#1e1e1e")
-        self.plotter.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.preview_splitter.addWidget(self.plotter)
 
-        # Пропорции при старте (2D : 3D = 1 : 2)
-        self.preview_splitter.setSizes([500, 500])
+        # Пропорции при старте
+        self.preview_splitter.setSizes([600, 600])
         main_layout.addWidget(self.preview_splitter, stretch=1)
+
+    def _toggle_wall_mode(self, is_ai):
+        status = " Режим: Сырые контуры ИИ" if is_ai else "✏️ Режим: Отредактированные контуры"
+        self.progress_label.setText(status)
 
     def _select_plan(self):
         path, _ = QFileDialog.getOpenFileName(self, "Выберите план", "", "Images (*.png *.jpg *.jpeg *.bmp)")
         if not path: return
 
-        if hasattr(i2w, 'process_floor_plan') and hasattr(i2w.process_floor_plan, 'cache_clear'):
-            i2w.process_floor_plan.cache_clear()
-
         self._plan_path = path
-        self.current_scene = None  # Сбрасываем старую 3D-модель
-
-        # 🔑 1. ЖЁСТКИЙ СБРОС РЕДАКТОРА (очищает списки, сцену, отключает сигналы)
+        self.current_scene = None
         self.editor_2d.reset_editor()
-
-        # 2. Загрузка нового фона
         self.editor_2d.set_background(path)
 
-        # 3. Вызов ИИ для НОВОГО плана
+        self.progress_label.setText("⏳ Обработка плана...")
+        QApplication.processEvents()  # Обновить UI перед тяжелой задачей
+
         try:
             _, _, regions_dict = i2w.process_floor_plan(self._plan_path)
         except Exception as e:
             QMessageBox.warning(self, "Ошибка ИИ", f"Не удалось обработать план: {e}")
+            self.progress_label.setText("❌ Ошибка обработки")
             return
 
-        # 4. Заполнение ТОЛЬКО новыми областями
         total_regions = 0
         for cls_name, polygons in regions_dict.items():
             if not polygons: continue
@@ -420,37 +455,31 @@ class MainWindow(QMainWindow):
                 total_regions += 1
 
         self.editor_2d.fitInView(self.editor_2d.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
-        self.statusBar().showMessage(f"📐 План обновлён. Загружено {total_regions} областей.", 3000)
+        self.progress_label.setText(f"✅ План загружен. Найдено {total_regions} объектов.")
 
     def _toggle_add_mode(self):
         self.editor_2d.set_add_mode(self.btn_add_region.isChecked())
 
     def _clear_all(self):
-        """Полная очистка редактора и связанных состояний"""
-        if not self.editor_2d.regions:
-            self.statusBar().showMessage("ℹ️ Список областей уже пуст", 2000)
+        if not self.editor_2d.regions and not self.current_scene:
+            self.progress_label.setText("️ Нечего очищать")
             return
 
-        if hasattr(i2w, 'clear_cache'):
-            i2w.clear_cache()
-        if hasattr(gm1, 'clear_cache'):
-            gm1.clear_cache()
+        if hasattr(i2w, 'clear_cache'): i2w.clear_cache()
+        if hasattr(gm1, 'clear_cache'): gm1.clear_cache()
 
-        self.editor_2d.reset_editor()  # Вызывает ваш готовый сброс
+        self.editor_2d.reset_editor()
+        self.current_scene = None
+        self.plotter.clear()
         self.btn_save.setEnabled(False)
-        self.statusBar().showMessage("🗑 Все области удалены, сценарий сброшен", 2000)
+        self.progress_label.setText("🧹 Очищено")
 
     def _rebuild_regions_dict(self) -> dict:
-        """Преобразует данные из 2D-редактора обратно в формат {класс: [numpy.array]}"""
-        import numpy as np
         rebuilt = {}
         for item in self.editor_2d.get_regions_data():
             cls = item['class']
-            if cls not in rebuilt:
-                rebuilt[cls] = []
-            # gm1 ожидает numpy-массивы, поэтому конвертируем list -> np.array
+            if cls not in rebuilt: rebuilt[cls] = []
             rebuilt[cls].append(np.array(item['coords'], dtype=np.float32))
-        print(f'len = {len(rebuilt)}')
         return rebuilt
 
     def _start_processing(self):
@@ -462,23 +491,19 @@ class MainWindow(QMainWindow):
             self.worker.terminate()
             self.worker.wait()
 
-        # 🔑 Собираем актуальные данные из 2D-редактора
         edited_regions = self._rebuild_regions_dict()
-        if edited_regions:
-            self.statusBar().showMessage(f"📐 Используем {len(edited_regions)} классов из редактора", 2000)
-        else:
-            self.statusBar().showMessage("📐 Используются данные нейросети без правок", 2000)
 
         self.btn_run.setEnabled(False)
         self.btn_save.setEnabled(False)
         self.progress_bar.setValue(0)
-        self.progress_label.setText("Запуск обработки...")
+        self.progress_label.setText("🏗 Генерация модели...")
 
         self.worker = ProcessingWorker(
             self._plan_path,
             self.input_scale.value(),
             self.input_height.value(),
-            edited_regions=edited_regions  # ← Передаём в поток
+            edited_regions=edited_regions,
+            use_ai_walls=self.btn_type_wall.isChecked()
         )
         self.worker.progress.connect(self._update_progress)
         self.worker.finished.connect(self._on_finished)
@@ -495,19 +520,18 @@ class MainWindow(QMainWindow):
 
         meshes = scene.dump()
         if meshes is None:
-            self.statusBar().showMessage("⚠️ Сцена пуста", 3000)
+            self.progress_label.setText("⚠️ Сцена пуста")
             self.btn_run.setEnabled(True)
             return
 
-        if not isinstance(meshes, list):
-            meshes = [meshes]
+        if not isinstance(meshes, list): meshes = [meshes]
 
         for mesh in meshes:
             if mesh is not None:
                 self.plotter.add_mesh(mesh, color="lightblue", show_edges=True, smooth_shading=True)
 
         self.plotter.reset_camera()
-        self.progress_label.setText("✅ Модель успешно построена")
+        self.progress_label.setText("✅ Модель построена")
         self.btn_run.setEnabled(True)
         self.btn_save.setEnabled(True)
 
@@ -520,12 +544,15 @@ class MainWindow(QMainWindow):
         if not self.current_scene: return
         path, _ = QFileDialog.getSaveFileName(self, "Сохранить модель", "", "Wavefront OBJ (*.obj)")
         if path:
-            self.current_scene.export(path, file_type="obj")
-            QMessageBox.information(self, "Успех", f"Модель сохранена:\n{path}")
+            try:
+                self.current_scene.export(path, file_type="obj")
+                QMessageBox.information(self, "Успех", f"Модель сохранена:\n{path}")
+                self.progress_label.setText(f"💾 Сохранено в {os.path.basename(path)}")
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка экспорта", str(e))
 
 
 if __name__ == "__main__":
-    # Опционально: высокая четкость для 4K мониторов
     os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 

@@ -192,9 +192,7 @@ def replace_gray_in_monochrome(image, lower_gray=39, upper_gray=255, target_valu
     - upper_gray: верхняя граница серого (0-255).
     - target_value: целевое значение (по умолчанию 255 — белый).
     """
-    # Создаем маску пикселей в заданном диапазоне
     mask = (image >= lower_gray) & (image <= upper_gray)
-    # Заменяем пиксели на целевое значение
     image[mask] = target_value
     return image
 
@@ -437,6 +435,9 @@ def process_floor_plan(image_path, border_size=20):
 
     # Корректировка координат контуров (удаление рамки)
     wall_contours = [cnt - border_size for cnt in filtered_contours_wall]
+
+    for key in filtered_contours1:
+        filtered_contours1[key] = [cnt - border_size for cnt in filtered_contours1[key]]
 
     # return sorted_corner, (original_height, original_width)
     return wall_contours, (original_height, original_width), filtered_contours1

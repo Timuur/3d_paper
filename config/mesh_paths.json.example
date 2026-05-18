@@ -1,0 +1,14 @@
+{
+  "// Door": "Основная входная дверь",
+  "Door": "3d_obj_test/Door_Component.obj",
+
+  "// GasPlate": "Газовая плита (кухня)",
+  "GasPlate": "3d_obj_test/Separate_assets_obj/kitchen_table_001.obj",
+
+  "// Window": "Окно (секционное)",
+  "Window": "3d_obj_test/window1.obj",
+
+  "// Пустые строки означают: объект не имеет 3D-модели и будет пропущен",
+  "Wardor": "",
+  "Wall": ""
+}

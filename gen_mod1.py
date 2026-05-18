@@ -1,239 +1,8 @@
-# import sys
-# from pathlib import Path
-# import numpy as np
-# import trimesh
-# from trimesh.transformations import translation_matrix, rotation_matrix, concatenate_matrices
-# from scipy.spatial import ConvexHull
-# from shapely.geometry import Polygon
-#
-#
-# # ─────────────────────────────────────────────────────────────
-# # 1. Утилиты
-# # ─────────────────────────────────────────────────────────────
-# def get_file_path(filename):
-#     """Получает путь к файлу, совместимый с PyInstaller"""
-#     base_path = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path(__file__).parent
-#     return base_path / filename
-#
-#
-# def get_contour_bounds(contour):
-#     """Безопасное получение ширины, высоты и центра контура"""
-#     pts = np.array(contour).reshape(-1, 2)
-#     min_xy = pts.min(axis=0)
-#     max_xy = pts.max(axis=0)
-#     width = max_xy[0] - min_xy[0]
-#     height = max_xy[1] - min_xy[1]
-#     center = (min_xy + max_xy) / 2
-#     return width, height, center
-#
-#
-# def transform_mesh(mesh, translation, rotation=None, scale=None):
-#     """Универсальное применение трансформаций (Scale -> Rotate -> Translate)"""
-#     m = mesh.copy()
-#     if scale is not None:
-#         m.apply_scale(scale)
-#     if rotation is not None:
-#         m.apply_transform(rotation)
-#     m.apply_translation(translation)
-#     return m
-#
-#
-# def gen_floor(polygon_points, thickness=0.3, color=(150, 150, 250, 200)):
-#     """Создание пола из 2D полигона"""
-#     polygon = Polygon(polygon_points)
-#     floor = trimesh.creation.extrude_polygon(polygon, height=thickness)
-#     # Поднимаем пол на его толщину/2, чтобы верхняя грань была на Z=0
-#     floor.apply_translation([0, 0, -thickness / 2])
-#     matrix_z_inversion = np.array([
-#         [1, 0, 0, 0],
-#         [0, -1, 0, 0],
-#         [0, 0, 1, 0],
-#         [0, 0, 0, 1]
-#     ])
-#     floor.apply_transform(matrix_z_inversion)
-#     floor.visual.face_colors = color
-#     return floor
-#
-#
-# # ─────────────────────────────────────────────────────────────
-# # 2. Единая функция размещения проёмов с CSG
-# # ─────────────────────────────────────────────────────────────
-# def place_openings(openings, wall_meshes, scale, height, base_mesh,
-#                    pre_rotation=None, wall_thickness=0.2, config=None):
-#     """
-#     Вырезает проёмы в стенах и размещает объекты.
-#     :param openings: список контуров
-#     :param wall_meshes: список мешей стен (будут изменены на месте)
-#     :param scale: масштаб пиксели -> метры
-#     :param height: высота помещения
-#     :param base_mesh: базовый меш объекта (дверь/окно)
-#     :param pre_rotation: начальная ориентация базового меша
-#     :param wall_thickness: толщина стены для выреза
-#     """
-#     if config is None:
-#         config = {'offset': [0.0, 0.0, 0.0], 'bottom_z': 0.0, 'manual_pos': None}
-#
-#     objects = []
-#
-#     for i, contour in enumerate(openings):
-#         try:
-#             # 1. Определяем позицию (ручную или из контура)
-#             if config.get('manual_pos') is not None:
-#                 pos_3d = np.array(config['manual_pos'], dtype=float)
-#                 w_3d, h_3d = config.get('manual_size', [1.0, 1.0])
-#             else:
-#                 w_px, h_px, center_px = get_contour_bounds(contour)
-#                 if w_px <= 0 or h_px <= 0:
-#                     continue
-#                 pos_3d = np.array([center_px[0] * scale, -center_px[1] * scale, height / 2])
-#                 w_3d, h_3d = w_px * scale, h_px * scale
-#
-#             # 2. Применяем смещение
-#             offset = np.array(config.get('offset', [0, 0, 0]), dtype=float)
-#             pos_3d += offset
-#
-#             # 5. Готовим объект: Масштаб -> Поворот -> Точная позиция
-#             obj = base_mesh.copy()
-#
-#             # Масштаб под проём
-#             obj_ext = obj.extents
-#             if obj_ext[0] > 0 and obj_ext[2] > 0:
-#                 obj.apply_scale([w_3d / obj_ext[0], 1.0, h_3d / obj_ext[2]])
-#
-#             # Поворот (если нужен)
-#             if pre_rotation is not None:
-#                 obj.apply_transform(pre_rotation)
-#
-#             # Финальная позиция: учитываем bottom_z (высота нижней грани от пола)
-#             bottom_z = config.get('bottom_z', 0.0)
-#             final_pos = pos_3d.copy()
-#             final_pos[2] = bottom_z + obj.extents[2] / 2  # Поднимаем так, чтобы низ был на bottom_z
-#
-#             # 3. Создаём вырез (синхронизирован с объектом)
-#             cutout = trimesh.primitives.Box(extents=[w_3d, wall_thickness + 0.02, h_3d])
-#             # Позиционируем вырез так, чтобы его центр совпадал с центром объекта по Z
-#             cutout.apply_translation(final_pos)
-#
-#             # 4. Вычитаем из стен
-#             for j, wall in enumerate(wall_meshes):
-#                 c_min, c_max = cutout.bounds
-#                 w_min, w_max = wall.bounds
-#                 if (c_min[0] < w_max[0] and c_max[0] > w_min[0] and
-#                         c_min[1] < w_max[1] and c_max[1] > w_min[1]):
-#                     try:
-#                         wall_meshes[j] = trimesh.boolean.difference(
-#                             [wall, cutout], engine="manifold"
-#                         )
-#                     except Exception as e:
-#                         print(f"⚠️ CSG failed for wall {j}: {e}")
-#
-#             # Переносим объект в итоговую позицию
-#             obj.apply_translation(final_pos - obj.centroid)
-#
-#             objects.append(obj)
-#             print(f"✅ Проём #{i + 1} размещён на Z={bottom_z} м, позиция: {final_pos}")
-#
-#         except Exception as e:
-#             print(f"❌ Ошибка обработки проёма #{i + 1}: {e}")
-#             continue
-#
-#     return objects
-#
-#
-# # ─────────────────────────────────────────────────────────────
-# # 3. Сборка сцены
-# # ─────────────────────────────────────────────────────────────
-# def build_3d_model(wall_contours, original_size, scale=0.1, height=3.0,
-#                    doors=None, windows=None):
-#     """
-#     Основная функция сборки. Поддерживает CSG и легко расширяется.
-#     """
-#     scene_objects = []
-#     all_points = []
-#
-#     # 1. Строим стены
-#     wall_meshes = []
-#     for contour in wall_contours:
-#         pts = np.array(contour).reshape(-1, 2)
-#         if len(pts) < 3:
-#             continue
-#
-#         scaled = pts * float(scale)
-#         if not np.allclose(scaled[0], scaled[-1]):
-#             scaled = np.vstack([scaled, scaled[0]])
-#
-#         matrix_z_inversion = np.array([
-#                         [1, 0, 0, 0],
-#                         [0, -1, 0, 0],
-#                         [0, 0, 1, 0],
-#                         [0, 0, 0, 1]
-#                     ])
-#
-#         all_points.append(scaled)
-#
-#         try:
-#             wall = trimesh.creation.extrude_polygon(Polygon(scaled), height=height)
-#             # Поднимаем, чтобы пол был на Z=0
-#             wall.apply_translation([0, 0, 0])
-#             wall.apply_transform(matrix_z_inversion)
-#             wall_meshes.append(wall)
-#         except Exception as e:
-#             print(f"⚠️ Ошибка стены: {e}")
-#
-#     # 2. Вырезаем проёмы и размещаем объекты
-#     if doors and mesh_door:
-#         rot_y = rotation_matrix(np.pi / 2, [1, 0, 0])
-#         scene_objects.extend(place_openings(doors, wall_meshes, scale, height, mesh_door,pre_rotation=rot_y, config=OPENING_PRESETS['door']))
-#     if windows and mesh_window:
-#         # Окна обычно повёрнуты на 90° относительно дверей, корректируем
-#         rot_y = rotation_matrix(np.pi / 2, [1, 0, 0])
-#         # scene_objects.extend(place_openings(windows, wall_meshes, scale, height, mesh_window, pre_rotation=rot_y))
-#         scene_objects.extend(place_openings(windows, wall_meshes, scale, height, mesh_window,
-#                        pre_rotation=rot_y, config=OPENING_PRESETS['window_standard']))
-#
-#     # 3. Добавляем модифицированные стены и пол
-#     scene_objects.extend(wall_meshes)
-#
-#     if all_points:
-#         hull_points = np.vstack(all_points)
-#         hull = ConvexHull(hull_points)
-#         floor_poly = hull_points[hull.vertices]
-#         scene_objects.append(gen_floor(floor_poly))
-#
-#     if not scene_objects:
-#         raise ValueError("Не удалось создать ни одного 3D-объекта")
-#
-#     return trimesh.Scene(scene_objects)
-#
-#
-# # ─────────────────────────────────────────────────────────────
-# # 4. Инициализация (пример использования)
-# # ─────────────────────────────────────────────────────────────
-# obj_path_door = get_file_path("3d_obj_test/Door_Component.obj")
-# obj_path_win = get_file_path("3d_obj_test/window1.obj")
-# mesh_door = trimesh.load(obj_path_door) if obj_path_door.exists() else None
-# mesh_window = trimesh.load(obj_path_win) if obj_path_win.exists() else None
-#
-# OPENING_PRESETS = {
-#     'door': {'bottom_z': 0.0, 'offset': [0, 0, 0]},
-#     'window_standard': {'bottom_z': 0.9, 'offset': [0, 0, 0]},
-#     'window_high': {'bottom_z': 1.8, 'offset': [0, 0, 0]},
-#     'ventilation': {'bottom_z': 2.2, 'offset': [0, 0, 0]},
-# }
-
-
-# Пример вызова:
-# scene = build_3d_model(wall_contours, img_size, scale=0.05, height=2.7,
-#                        doors=door_contours, windows=win_contours)
-# scene.show()
-
-
-
-# ________________________________________________________________________________________________________________________
 import sys
 from pathlib import Path
 import numpy as np
 import trimesh
+import json
 
 import img2wall as i2w
 from scipy.spatial import ConvexHull
@@ -251,29 +20,66 @@ def get_file_path(filename: str) -> Path:
     base_path = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path(__file__).parent
     return base_path / filename
 
-# obj_path_door = get_file_path("3d_obj_test/Door_Component.obj")
-# obj_path_win = get_file_path("3d_obj_test/window1.obj")
-#
-# mesh_door = trimesh.load(obj_path_door)
-# mesh_window = trimesh.load(obj_path_win)
-
+def reload_mesh_paths() -> dict:
+    """
+    Принудительная перезагрузка конфигурации путей.
+    Полезно при изменении JSON во время работы приложения.
+    """
+    global obj_mesh
+    obj_mesh = load_mesh_paths()
+    return obj_mesh
 
 def clear_cache():
     """Очистка кэшей генератора 3D"""
     import gc
 
-    # Очистка внутреннего кэша trimesh (если доступен)
-    if hasattr(trimesh, 'cache') and hasattr(trimesh.cache, 'clear'):
-        trimesh.cache.clear()
+    try:
+        if hasattr(trimesh, 'cache'):
+            trimesh.cache.clear()
+    except:
+        pass
 
     # Также можно очистить кэш загрузчиков
     if hasattr(trimesh.exchange, 'load') and hasattr(trimesh.exchange.load, '_mesh_loaders'):
-        # Не трогаем напрямую, но можно пересоздать сцену
         pass
 
-    # Принудительный сборщик мусора для крупных объектов
+    reload_mesh_paths()
     gc.collect()
 
+def load_mesh_paths() -> dict:
+    """
+    Загружает пути к 3D-моделям из JSON-конфига.
+    Возвращает словарь {class_name: relative_path}.
+    """
+    config_path = get_file_path('config/mesh_paths.json')
+
+    if not config_path.exists():
+        print(f"⚠️  Файл конфигурации не найден: {config_path}")
+        print("📝  Используются пути по умолчанию (пустые)")
+        return {}
+
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            mesh_paths = json.load(f)
+
+        # Валидация: проверяем, что все значения — строки
+        for key, value in mesh_paths.items():
+            if not isinstance(value, str):
+                print(f"⚠️  Неверный тип пути для '{key}': {type(value)}. Ожидалась строка.")
+                mesh_paths[key] = ""
+
+        print(f"✅  Загружено {len(mesh_paths)} путей к 3D-моделям из {config_path.name}")
+        return mesh_paths
+
+    except json.JSONDecodeError as e:
+        print(f"❌  Ошибка парсинга JSON в {config_path}: {e}")
+        print("📝  Используйте валидный JSON (проверьте запятые и кавычки)")
+        return {}
+    except Exception as e:
+        print(f"❌  Ошибка загрузки конфигурации: {e}")
+        return {}
+
+obj_mesh = load_mesh_paths()
 
 def _load_mesh_safe(path: Path, default_scale: float = 8.0):
     """Безопасная загрузка меша с валидацией."""
@@ -293,34 +99,6 @@ def _load_mesh_safe(path: Path, default_scale: float = 8.0):
         print(f"❌ Ошибка загрузки {path}: {e}")
         return None
 
-# Door_MESH = _load_mesh_safe(get_file_path())
-# Window_MESH = _load_mesh_safe(get_file_path())
-# _FRI_MESH = _load_mesh_safe(get_file_path())
-# _KitSink_MESH = _load_mesh_safe(get_file_path("3d_obj_test/Separate_assets_obj/kitchen_sink_001.obj"))
-# _WasMach_MESH = _load_mesh_safe(get_file_path("3d_obj_test/Separate_assets_obj/washing_machine_001.obj"))
-
-obj_mesh = {'Door': "3d_obj_test/Door_Component.obj",
-            'GasPlate': "3d_obj_test/Separate_assets_obj/kitchen_table_001.obj",
-            'Wardor': "",
-            'Wall': "",
-            # 'Window': "3d_obj_test/3d models/windows_1sector.obj",
-            'Window': "3d_obj_test/window1.obj",
-            'bathtube': "3d_obj_test/OBJ/bath.obj",
-            'box': "3d_obj_test/Separate_assets_obj/box_001.obj",
-            'cold_box': "3d_obj_test/Separate_assets_obj/fridge_001.obj",
-            'door-s': "",
-            'door_l': "",
-            'door_balcon': "",
-            'door_bath': "3d_obj_test/Separate_assets_obj/door_001.obj",
-            'h-wall': "",
-            'door_vhod_l': "",
-            'sink': "3d_obj_test/OBJ/sink.obj",
-            'sink_kitchen': "3d_obj_test/Separate_assets_obj/kitchen_sink_001.obj",
-            'balcon_wall': "",
-            'toulet': "3d_obj_test/OBJ/toilet.obj",
-            'wash_machine': "3d_obj_test/Separate_assets_obj/washing_machine_001.obj",
-            'win_in_wall': ""
-}
 
 def gen_floor(objects):
 
@@ -361,13 +139,13 @@ def build_obj(obj_contours, wall_contours, scale):
                 # print(")()()()(try copy mesh)()()()()(")
 
                 mesh = mesh_obj.copy()
-                # print(")()()()( copy pass mesh)()()()()(")
+                print(")()()()( copy pass mesh)()()()()(")
 
-                # wight_d = contour[2][0] - contour[0][0]
-                # hight_d = contour[1][1] - contour[0][1]
+                wight_d = contour[2][0] - contour[0][0]
+                hight_d = contour[1][1] - contour[0][1]
 
-                # ppoint = contour[0]
-                # p_ch = False
+                ppoint = contour[0]
+                p_ch = False
                 # for i1, contur in enumerate(wall_contours):
                 #     next_wall = wall_contours[(i1+1) % len(wall_contours)]
                     # box_door = check_door(contur, next_wall)
@@ -399,9 +177,9 @@ def build_obj(obj_contours, wall_contours, scale):
                 # ppoint_s = ppoint * float(scale)
                 # print(scaled)
                 # print(ppoint_s)
-                # if wight_d > hight_d and p_ch:
+                # if wight_d > hight_d:
                 #     scaled = scaled[0], ppoint_s[1], scaled[2]
-                # if wight_d < hight_d and p_ch:
+                # else:
                 #     scaled = ppoint_s[0], scaled[1], scaled[2]
                 # print(scaled)
                 # print(scaled[0])
@@ -433,19 +211,19 @@ def build_obj(obj_contours, wall_contours, scale):
                     transform = concatenate_matrices(matrix_z_inversion, rot)
                     mesh.apply_transform(transform)
                     # # print(transform)
-                    # if wight_d < hight_d:
-                    #     # 1. Находим его центр (bounding box центроид)
-                    #     center = mesh.bounding_box.centroid
-                    #
-                    #     # 2. Переносим в начало координат
-                    #     mesh.apply_translation(-center)
-                    #
-                    #     # 3. Поворачиваем (например, на 45° вокруг оси Z)
-                    #     rotation = rotation_matrix(np.pi / 2, [0, 0, 1])  # Ось Z
-                    #     mesh.apply_transform(rotation)
-                    #
-                    #     # 4. Возвращаем на исходную позицию
-                    #     mesh.apply_translation(center)
+                    if wight_d < hight_d:
+                        # 1. Находим его центр (bounding box центроид)
+                        center = mesh.bounding_box.centroid
+
+                        # 2. Переносим в начало координат
+                        mesh.apply_translation(-center)
+
+                        # 3. Поворачиваем (например, на 45° вокруг оси Z)
+                        rotation = rotation_matrix(np.pi / 2, [0, 0, 1])  # Ось Z
+                        mesh.apply_transform(rotation)
+
+                        # 4. Возвращаем на исходную позицию
+                        mesh.apply_translation(center)
                     #
                     # hight_door = mesh.extents.tolist()
                     # # print(hight_door)

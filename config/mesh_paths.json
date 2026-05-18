@@ -1,0 +1,21 @@
+{
+  "Door": "3d_obj_test/3d models/room_door.obj",
+  "GasPlate": "3d_obj_test/Separate_assets_obj/kitchen_table_001.obj",
+  "Wardor": "",
+  "Wall": "",
+  "Window": "3d_obj_test/window1.obj",
+  "bathtube": "3d_obj_test/OBJ/bath.obj",
+  "box": "3d_obj_test/Separate_assets_obj/box_001.obj",
+  "cold_box": "3d_obj_test/Separate_assets_obj/fridge_001.obj",
+  "door-s": "",
+  "door_l": "",
+  "door_balcon": "",
+  "door_bath": "3d_obj_test/Separate_assets_obj/door_001.obj",
+  "h-wall": "",
+  "sink": "3d_obj_test/OBJ/sink.obj",
+  "sink_kitchen": "3d_obj_test/Separate_assets_obj/kitchen_sink_001.obj",
+  "balcon_wall": "",
+  "toulet": "3d_obj_test/OBJ/toilet.obj",
+  "wash_machine": "3d_obj_test/Separate_assets_obj/washing_machine_001.obj",
+  "win_in_wall": ""
+}
