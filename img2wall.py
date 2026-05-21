@@ -6,32 +6,148 @@ from matplotlib import pyplot as plt
 
 from check_img_ai_v2 import get_coord
 
-# import functools
-# def clear_cache():
-#     """Сброс всех внутренних кэшей и глобальных состояний"""
-#     _cached_detection.cache_clear()
-
 classes_dict = {'Door': [],
-            'GasPlate': [],
-            'Wardor': [],
-            'Wall': [],
-            'Window': [],
-            'bathtube': [],
-            'box': [],
-            'door_bath': [],
-            'cold_box': [],
-            'door-s': [],
-            'door_l': [],
-            'door_balcon': [],
-            'door_bath': [],
-            'h-wall': [],
-            'door_vhod_l': [],
-            'sink': [],
-            'sink_kitchen': [],
-            'balcon_wall': [],
-            'toulet': [],
-            'wash_machine': [],
-            'win_in_wall': []}
+                'GasPlate': [],
+                'Wardor': [],
+                'Wall': [],
+                'Window': [],
+                'bathtube': [],
+                'box': [],
+                'door_bath': [],
+                'cold_box': [],
+                'door-s': [],
+                'door_l': [],
+                'door_balcon': [],
+                'h-wall': [],
+                'door_vhod_l': [],
+                'sink': [],
+                'sink_kitchen': [],
+                'balcon_wall': [],
+                'toulet': [],
+                'wash_machine': [],
+                'win_in_wall': []
+                }
+
+
+def calculate_and_resize_image(image_path, output_path=None, target_bath_door_cm=90, target_regular_door_cm=100):
+    """
+    Масштабирует изображение плана так, чтобы двери соответствовали стандартным размерам.
+
+    Args:
+        image_path: Путь к исходному изображению
+        output_path: Путь для сохранения масштабированного изображения (если None - не сохранять)
+        target_bath_door_cm: Целевая ширина двери в ванную (см)
+        target_regular_door_cm: Целевая ширина обычной двери (см)
+
+    Returns:
+        dict: {
+            'scaled_image': масштабированное изображение,
+            'scale_factor': коэффициент масштабирования,
+            'original_size': (width, height) исходного изображения,
+            'new_size': (width, height) нового изображения,
+            'cm_per_pixel': масштаб (см/пиксель) после масштабирования
+        }
+    """
+    # 1. Загружаем изображение и детектируем объекты
+    original_image = cv2.imread(image_path)
+    if original_image is None:
+        raise ValueError(f"Не удалось загрузить изображение: {image_path}")
+
+    original_height, original_width = original_image.shape[:2]
+    print(f"\n📐 Исходный размер изображения: {original_width}×{original_height} px")
+
+    # 2. Получаем координаты дверей (предполагаем, что get_coord уже настроен)
+    from check_img_ai_v2 import get_coord
+
+    # Временная обработка для получения дверей
+    detections, labels = get_coord(image_path)
+
+    door_bath_pixels = []
+    door_regular_pixels = []
+
+    for i in range(len(detections)):
+        xyxy_tensor = detections[i].xyxy.cpu()
+        xyxy = xyxy_tensor.numpy().squeeze()
+        xmin, ymin, xmax, ymax = xyxy.astype(int)
+
+        classidx = int(detections[i].cls.item())
+        classname = labels[classidx]
+
+        width_px = xmax - xmin
+        height_px = ymax - ymin
+        door_size_px = max(width_px, height_px)  # Большая сторона - это ширина двери
+
+        # Классифицируем двери
+        if classname in ['door_bath', 'Door'] and 50 < door_size_px < 300:
+            if classname == 'door_bath':
+                door_bath_pixels.append(door_size_px)
+                print(f"   🚪 Дверь в ванную: {door_size_px} px")
+            else:
+                door_regular_pixels.append(door_size_px)
+                print(f"   🚪 Обычная дверь: {door_size_px} px")
+
+    # 3. Вычисляем целевой масштаб
+    if door_bath_pixels:
+        # Приоритет: дверь в ванную
+        avg_bath_door_px = np.median(door_bath_pixels)
+        current_cm_per_pixel = target_bath_door_cm / avg_bath_door_px
+
+        print(f"\n📏 Масштаб определен по двери в ванную:")
+        print(f"   Средняя ширина: {avg_bath_door_px:.1f} px")
+        print(f"   Целевой размер: {target_bath_door_cm} см")
+        print(f"   Текущий масштаб: 1 px = {current_cm_per_pixel:.4f} см")
+
+    elif door_regular_pixels:
+        # Если нет двери в ванную - используем обычные двери
+        avg_regular_door_px = np.median(door_regular_pixels)
+        current_cm_per_pixel = target_regular_door_cm / avg_regular_door_px
+
+        print(f"\n📏 Масштаб определен по обычной двери:")
+        print(f"   Средняя ширина: {avg_regular_door_px:.1f} px")
+        print(f"   Целевой размер: {target_regular_door_cm} см")
+        print(f"   Текущий масштаб: 1 px = {current_cm_per_pixel:.4f} см")
+    else:
+        print("⚠️ Двери не найдены! Используется масштаб по умолчанию")
+        current_cm_per_pixel = 0.1  # Дефолтный масштаб
+
+    # 4. Вычисляем желаемый масштаб
+    # Целевой масштаб: например, 1 пиксель = 0.5 см (или другой удобный)
+    target_cm_per_pixel = 0.5  # Можно настроить
+
+    # Коэффициент масштабирования изображения
+    scale_factor = current_cm_per_pixel / target_cm_per_pixel
+
+    print(f"\n🔄 Масштабирование:")
+    print(f"   Текущий масштаб: 1 px = {current_cm_per_pixel:.4f} см")
+    print(f"   Целевой масштаб: 1 px = {target_cm_per_pixel:.4f} см")
+    print(f"   Коэффициент: {scale_factor:.4f}")
+
+    # 5. Вычисляем новые размеры
+    new_width = int(original_width * scale_factor)
+    new_height = int(original_height * scale_factor)
+
+    print(f"\n📐 Новые размеры:")
+    print(f"   {original_width}×{original_height} → {new_width}×{new_height} px")
+
+    # 6. Масштабируем изображение
+    scaled_image = cv2.resize(
+        original_image,
+        (new_width, new_height),
+        interpolation=cv2.INTER_AREA if scale_factor < 1 else cv2.INTER_LANCZOS4
+    )
+
+    # 7. Сохраняем если указан путь
+    if output_path:
+        cv2.imwrite(output_path, scaled_image)
+        print(f"✅ Изображение сохранено: {output_path}")
+
+    return {
+        'scaled_image': scaled_image,
+        'scale_factor': scale_factor,
+        'original_size': (original_width, original_height),
+        'new_size': (new_width, new_height),
+        'cm_per_pixel': target_cm_per_pixel
+    }
 
 def average_close_points(points, threshold=2):
     """
@@ -83,14 +199,12 @@ def average_close2points(points, threshold=2):
             # Получаем координаты точки, учитывая возможную структуру массива
             if points[i][j].ndim == 2:  # Если массив вида [[x, y]]
                 x1, y1 = points[i][j][0]
-            else:  # Если массив вида [x, y] или просто скаляр (но в вашем случае это массив)
+            else:  # Если массив вида [x, y]
                 x1, y1 = points[i][j].ravel()
 
             # Сравниваем со всеми остальными точками
             for k in range(len(points)):
-                # for k in range(i, len(points)):
                 for l in range(len(points[k])):
-                    # for l in range(j + 1 if k == i else 0, len(points[k])):
                     # Аналогично получаем x2, y2
                     if points[k][l].ndim == 2:
                         x2, y2 = points[k][l][0]
@@ -170,7 +284,7 @@ def clear_cache():
 
     # 2. Безопасная очистка кэша нейросети
     try:
-        from check_img_ai_v2 import cache_clear as cache_clear_ii
+        from check_img_ai_v2 import clear_cache as cache_clear_ii
         cache_clear_ii()
     except:
         pass
@@ -206,11 +320,11 @@ def get_scale(classes_dict, original_image, pixel_on_map=151):
         if wight_d_i > hight_d_i:
             # scale_win = wight_d_i * float(scale) / hight_win[0]
             scale_p = pixel_on_map / wight_d_i
-            print('(', scale_p,")hight_d = ", pixel_on_map, ' / ', wight_d_i,'/', wight_d_i*0.05)
+            # print('(', scale_p,")hight_d = ", pixel_on_map, ' / ', wight_d_i,'/', wight_d_i*0.05)
         else:
             # scale_win = hight_d_i * float(scale) / hight_win[0]
             scale_p =  pixel_on_map / hight_d_i
-            print('(', scale_p,")hight_d = ", pixel_on_map, '/', hight_d_i,'/', hight_d_i*0.05)
+            # print('(', scale_p,")hight_d = ", pixel_on_map, '/', hight_d_i,'/', hight_d_i*0.05)
     # for i, contour in enumerate(classes_dict['door_bath']):
     #     wight_d_i = contour[2][0] - contour[0][0]
     #     hight_d_i = contour[1][1] - contour[0][1]
@@ -260,7 +374,7 @@ def process_floor_plan(image_path, border_size=20):
 
     detections, labels = get_coord(image_path)
     # print(detections)
-    # print(labels)
+    print(labels)
     for i in range(len(detections)):
         # Get bounding box coordinates
         # Ultralytics returns results in Tensor format, which have to be converted to a regular Python array
@@ -360,8 +474,8 @@ def process_floor_plan(image_path, border_size=20):
                     filtered_contours1[category].append(contour)
 
                     # Рисуем контур (особая толщина для toilet)
-                    thickness = 2
-                    cv2.drawContours(bordered_image, [contour], 0, color1, thickness)
+                    # thickness = 2
+                    # cv2.drawContours(bordered_image, [contour], 0, color1, thickness)
         else:
             # Если контуров нет, создаем пустой список для этой категории
             filtered_contours1[category] = []
@@ -370,15 +484,15 @@ def process_floor_plan(image_path, border_size=20):
     contours_wall = average_close2points(contours_wall, 2)
 
     for i, contour in enumerate(contours_wall):
-        contour = np.array( average_close_points(   contour.reshape(-1, 2), 3))
         print(contour)
+        contour = np.array( average_close_points(   contour.reshape(-1, 2), 3))
         x, y, w, h = cv2.boundingRect(contour)
         if (x > border_size + border_margin
                 and y > border_size + border_margin
                 and (x + w) < (image_width - border_size - border_margin)
                 and (y + h) < (image_height - border_size - border_margin)):
             filtered_contours_wall.append(contour)
-            cv2.drawContours(bordered_image, [contour], 0, (randrange(50,256), randrange(50, 256), randrange(50, 256)), 1)
+            # cv2.drawContours(bordered_image, [contour], 0, (randrange(50,256), randrange(50, 256), randrange(50, 256)), 1)
         # contour_points = contour.reshape(-1, 2)
 
     #     # Вывод таблицы для каждого контура
@@ -391,8 +505,8 @@ def process_floor_plan(image_path, border_size=20):
     #     ))
     # # print("________________________________________________________________________")
     # #
-    # # print(f"\nКонтур #abs:")
-    # # print(filtered_contours)
+    print(f"\nКонтур #abs:")
+    print(filtered_contours1)
     # print("________________________________________________________________________")
     # print("________________________________________________________________________")
 
@@ -441,3 +555,120 @@ def process_floor_plan(image_path, border_size=20):
 
     # return sorted_corner, (original_height, original_width)
     return wall_contours, (original_height, original_width), filtered_contours1
+
+
+def process_floor_plan_with_scaling(image_path, border_size=20, target_cm_per_pixel=0.5):
+    """
+    Обработка плана с автоматическим масштабированием изображения.
+
+    Args:
+        image_path: Путь к изображению
+        border_size: Размер рамки
+        target_cm_per_pixel: Целевой масштаб (см/пиксель)
+
+    Returns:
+        wall_contours, original_size, obj_contours, cm_per_pixel, scaled_image
+    """
+    global classes_dict
+
+    # 1. Сначала масштабируем изображение
+    print("=" * 60)
+    print("📐 ЭТАП 1: МАСШТАБИРОВАНИЕ ИЗОБРАЖЕНИЯ")
+    print("=" * 60)
+
+    resize_result = calculate_and_resize_image(
+        image_path,
+        output_path=None,  # Можно указать 'scaled_plan.png'
+        target_bath_door_cm=90,
+        target_regular_door_cm=100
+    )
+
+    scaled_image = resize_result['scaled_image']
+    cm_per_pixel = resize_result['cm_per_pixel']
+
+    # 2. Временное сохранение для обработки
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+        temp_path = tmp.name
+        cv2.imwrite(temp_path, scaled_image)
+
+    # 3. Обрабатываем масштабированное изображение
+    print("\n" + "=" * 60)
+    print("📐 ЭТАП 2: ОБРАБОТКА МАСШТАБИРОВАННОГО ПЛАНА")
+    print("=" * 60)
+
+    # Очищаем кэш
+    classes_dict = {key: [] for key in classes_dict}
+
+    # Детектируем объекты на масштабированном изображении
+    from check_img_ai_v2 import get_coord
+
+    detections, labels = get_coord(temp_path)
+
+    for i in range(len(detections)):
+        xyxy_tensor = detections[i].xyxy.cpu()
+        xyxy = xyxy_tensor.numpy().squeeze()
+        xmin, ymin, xmax, ymax = xyxy.astype(int)
+
+        # Добавляем border_size
+        xy1 = (xmin + border_size, ymin + border_size)
+        xy2 = (xmin + border_size, ymax + border_size)
+        xy3 = (xmax + border_size, ymax + border_size)
+        xy4 = (xmax + border_size, ymin + border_size)
+
+        classidx = int(detections[i].cls.item())
+        classname = labels[classidx]
+
+        if classname in classes_dict:
+            contour = np.array([xy1, xy2, xy3, xy4])
+            classes_dict[classname].append(contour)
+
+    # 4. Обрабатываем стены (как раньше)
+    original_height, original_width = scaled_image.shape[:2]
+    bordered_image = add_white_border(scaled_image, border_size)
+
+    gray_image = cv2.cvtColor(bordered_image, cv2.COLOR_BGR2GRAY)
+    processed_image = apply_adaptive_threshold(gray_image)
+
+    # Морфология и очистка
+    kernel = np.ones((5, 5), np.uint8)
+    cleaned_image = cv2.morphologyEx(processed_image, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+    # Поиск контуров стен
+    contours_wall, _ = cv2.findContours(cleaned_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Фильтрация
+    filtered_contours_wall = []
+    border_margin = 10
+    image_height, image_width = cleaned_image.shape
+
+    for contour in contours_wall:
+        contour = contour.reshape(-1, 2)
+        x, y, w, h = cv2.boundingRect(contour)
+
+        if (x > border_size + border_margin and
+                y > border_size + border_margin and
+                (x + w) < (image_width - border_size - border_margin) and
+                (y + h) < (image_height - border_size - border_margin)):
+            filtered_contours_wall.append(contour)
+
+    # Усреднение точек
+    filtered_contours_wall = average_close2points(filtered_contours_wall, 4)
+
+    # Корректировка координат (убираем border_size)
+    wall_contours = [cnt - border_size for cnt in filtered_contours_wall]
+
+    # Корректируем координаты объектов
+    for key in classes_dict:
+        classes_dict[key] = [cnt - border_size for cnt in classes_dict[key]]
+
+    # Удаляем временный файл
+    import os
+    os.unlink(temp_path)
+
+    print(f"\n✅ Обработка завершена!")
+    print(f"   Найдено стен: {len(wall_contours)}")
+    print(f"   Найдено объектов: {sum(len(v) for v in classes_dict.values())}")
+    print(f"   Масштаб: 1 px = {cm_per_pixel:.4f} см")
+
+    return wall_contours, (original_height, original_width), classes_dict, cm_per_pixel, scaled_image

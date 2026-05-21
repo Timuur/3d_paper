@@ -1,9 +1,10 @@
 {
-  "Door": "3d_obj_test/3d models/room_door.obj",
-  "GasPlate": "3d_obj_test/Separate_assets_obj/kitchen_table_001.obj",
-  "Wardor": "",
+  "Door": "3d_obj_test/Door_Component.obj",
+  "GasPlate": "3d_obj_test/Separate_assets_obj/microwave_oven_001.obj",
+  "Wardor": "3d_obj_test/Separate_assets_obj/closet_001.obj",
   "Wall": "",
   "Window": "3d_obj_test/window1.obj",
+  "Window_max": "3d_obj_test/3d models/windows_2sector.obj",
   "bathtube": "3d_obj_test/OBJ/bath.obj",
   "box": "3d_obj_test/Separate_assets_obj/box_001.obj",
   "cold_box": "3d_obj_test/Separate_assets_obj/fridge_001.obj",

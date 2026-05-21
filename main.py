@@ -1,6 +1,5 @@
 import sys
 import os
-import time
 from typing import Optional
 import numpy as np
 
@@ -78,7 +77,7 @@ class EditableRegionItem(QGraphicsObject):
     def __init__(self, polygon: list, region_class: str = "Unknown", parent=None):
         super().__init__(parent)
         self.setFlags(
-            QGraphicsItem.ItemIsMovable | QGraphicsItem.ItemIsSelectable | QGraphicsItem.ItemSendsGeometryChanges)
+            QGraphicsItem.GraphicsItemFlag.ItemIsMovable | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.setAcceptHoverEvents(True)
         self.region_class = region_class
         self.drag_index = -1
@@ -93,15 +92,15 @@ class EditableRegionItem(QGraphicsObject):
         max_y = max(p.y() for p in self.points) + self.HANDLE_SIZE
         return QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
 
-    def paint(self, painter: QPainter, option, widget):
-        base_color = QColor("#00b8ff");
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget] = None) -> None:
+        base_color = QColor("#00b8ff")
         base_color.setAlpha(60)
-        sel_color = QColor("#ffcc00");
+        sel_color = QColor("#ffcc00")
         sel_color.setAlpha(80)
         is_selected = self.isSelected()
         brush = QBrush(sel_color if is_selected else base_color)
         pen = QPen(QColor("#ffcc00" if is_selected else "#00b8ff"), 2)
-        painter.setPen(pen);
+        painter.setPen(pen)
         painter.setBrush(brush)
         painter.drawPolygon(QPolygonF(self.points))
         painter.setPen(QPen(QColor("#ffffff"), 1))
@@ -117,7 +116,7 @@ class EditableRegionItem(QGraphicsObject):
 
     def hoverMoveEvent(self, event):
         if self._find_closest_handle(event.pos()) != -1:
-            self.setCursor(Qt.SizeAllCursor)
+            self.setCursor(Qt.CursorShape.SizeAllCursor)
         else:
             self.unsetCursor()
         super().hoverMoveEvent(event)
@@ -127,10 +126,10 @@ class EditableRegionItem(QGraphicsObject):
         super().hoverLeaveEvent(event)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             self.drag_index = self._find_closest_handle(event.pos())
             if self.drag_index != -1:
-                self.setCursor(Qt.SizeAllCursor)
+                self.setCursor(Qt.CursorShape.SizeAllCursor)
             else:
                 super().mousePressEvent(event)
         else:
@@ -175,9 +174,9 @@ class PlanEditorView(QGraphicsView):
         super().__init__(parent)
         self.scene = QGraphicsScene(self)
         self.setScene(self.scene)
-        self.setRenderHint(QPainter.Antialiasing)
-        self.setDragMode(QGraphicsView.ScrollHandDrag)
-        self.setAlignment(Qt.AlignCenter)
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet("background: #2a2a2a; border: 1px solid #444; border-radius: 4px;")
 
         self.add_mode = False
@@ -234,11 +233,11 @@ class PlanEditorView(QGraphicsView):
 
     def set_add_mode(self, enabled: bool):
         self.add_mode = enabled
-        self.setDragMode(QGraphicsView.NoDrag if enabled else QGraphicsView.ScrollHandDrag)
-        self.setCursor(QCursor(Qt.CrossCursor if enabled else Qt.ArrowCursor))
+        self.setDragMode(QGraphicsView.DragMode.NoDrag if enabled else QGraphicsView.DragMode.ScrollHandDrag)
+        self.setCursor(QCursor(Qt.CursorShape.CrossCursor if enabled else Qt.CursorShape.ArrowCursor))
 
     def mousePressEvent(self, event):
-        if self.add_mode and event.button() == Qt.LeftButton:
+        if self.add_mode and event.button() == Qt.MouseButton.LeftButton:
             self.rect_start = self.mapToScene(event.pos())
         super().mousePressEvent(event)
 
@@ -247,7 +246,7 @@ class PlanEditorView(QGraphicsView):
             if not self.temp_rect:
                 self.temp_rect = QGraphicsRectItem()
                 self.scene.addItem(self.temp_rect)
-                self.temp_rect.setPen(QPen(Qt.DashLine))
+                self.temp_rect.setPen(QPen(Qt.PenStyle.DashLine))
             end = self.mapToScene(event.pos())
             self.temp_rect.setRect(QRectF(self.rect_start, end).normalized())
         super().mouseMoveEvent(event)
@@ -304,7 +303,7 @@ class MainWindow(QMainWindow):
 
         # ================= ВЕРХНЯЯ ПАНЕЛЬ УПРАВЛЕНИЯ =================
         controls_container = QFrame()
-        controls_container.setFrameShape(QFrame.StyledPanel)
+        controls_container.setFrameShape(QFrame.Shape.StyledPanel)
         controls_container.setStyleSheet("QFrame { background: #f0f0f0; border-radius: 4px; padding: 5px; }")
 
         controls_layout = QVBoxLayout(controls_container)
@@ -428,6 +427,7 @@ class MainWindow(QMainWindow):
         self.progress_label.setText(status)
 
     def _select_plan(self):
+        #TODO: проверить паралельность обработки, либо забить и указывать на долгую работу в первый запуск
         path, _ = QFileDialog.getOpenFileName(self, "Выберите план", "", "Images (*.png *.jpg *.jpeg *.bmp)")
         if not path: return
 
@@ -441,6 +441,7 @@ class MainWindow(QMainWindow):
 
         try:
             _, _, regions_dict = i2w.process_floor_plan(self._plan_path)
+            i2w.calculate_and_resize_image(self._plan_path)
         except Exception as e:
             QMessageBox.warning(self, "Ошибка ИИ", f"Не удалось обработать план: {e}")
             self.progress_label.setText("❌ Ошибка обработки")

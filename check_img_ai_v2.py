@@ -38,9 +38,9 @@ def clear_cache():
     global _model_cache, _labels_cache
 
     # 1. Удаляем ссылку на модель (освобождение памяти)
-    if _model_cache is not None:
-        del _model_cache
-        _model_cache = None
+    # if _model_cache is not None:
+    #     del _model_cache
+    #     _model_cache = None
 
     if _labels_cache is not None:
         _labels_cache = None
