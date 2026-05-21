@@ -29,7 +29,7 @@ classes_dict = {'Door': [],
                 }
 
 
-def calculate_and_resize_image(image_path, output_path=None, target_bath_door_cm=90, target_regular_door_cm=100):
+def calculate_and_resize_image(image_path, output_path=None, target_bath_door_cm=90, target_regular_door_cm=100, target_cm_per_pixel=0.5):
     """
     Масштабирует изображение плана так, чтобы двери соответствовали стандартным размерам.
 
@@ -112,7 +112,7 @@ def calculate_and_resize_image(image_path, output_path=None, target_bath_door_cm
 
     # 4. Вычисляем желаемый масштаб
     # Целевой масштаб: например, 1 пиксель = 0.5 см (или другой удобный)
-    target_cm_per_pixel = 0.5  # Можно настроить
+    # target_cm_per_pixel = 0.5  # Можно настроить
 
     # Коэффициент масштабирования изображения
     scale_factor = current_cm_per_pixel / target_cm_per_pixel

@@ -10,6 +10,8 @@ from PySide6.QtGui import QPixmap, QPainter, QPen, QBrush, QPolygonF, QColor, QC
 import trimesh
 import pyvista as pv
 from pyvistaqt import QtInteractor
+import cv2
+
 
 import img2wall as i2w
 import gen_mod1 as gm1
@@ -21,19 +23,24 @@ class ProcessingWorker(QThread):
     error = Signal(str)
 
     def __init__(self, plan_path: str, scale: float, wall_height: float,
-                 edited_regions: Optional[dict] = None, use_ai_walls: bool = False):
+                 edited_regions: Optional[dict] = None, use_ai_walls: bool = False, precomputed_contours: Optional[dict] = None):
         super().__init__()
         self.plan_path = plan_path
         self.scale = scale
         self.wall_height = wall_height * 7.14  # коэффициент масштабирования
         self.edited_regions: Optional[dict] = edited_regions
         self.use_ai_walls = use_ai_walls  # 🔧 FIX: принимаем состояние переключателя
+        self.precomputed_contours = precomputed_contours
 
     def run(self):
         try:
             # 1. Анализ плана
             self.progress.emit("1/4: Анализ плана нейросетью...", 20)
+            if self.precomputed_contours:
+                raw_contours = self.precomputed_contours
+
             wall_contours_cv, image_size, raw_contours = i2w.process_floor_plan(self.plan_path)
+
             contours = self.edited_regions if self.edited_regions else raw_contours
 
             # 🔧 FIX: логика выбора контуров на основе переключателя
@@ -49,7 +56,7 @@ class ProcessingWorker(QThread):
             # 2. Генерация стен
             self.progress.emit("2/4: Построение 3D-геометрии стен...", 45)
             scene = gm1.build_3d_model(wall_contours, self.scale, self.wall_height)
-            if h_wall_contours:
+            if h_wall_contours and self.use_ai_walls:
                 scene.add_geometry(gm1.build_3d_model(h_wall_contours, self.scale, self.wall_height))
 
             # 3. Проёмы и мебель
@@ -342,11 +349,25 @@ class MainWindow(QMainWindow):
         params_group_layout.setContentsMargins(5, 5, 5, 5)
 
         self.input_scale = QDoubleSpinBox()
-        self.input_scale.setRange(0.001, 5.0)
+        self.input_scale.setRange(0.001, 10.0)
         self.input_scale.setValue(0.05)
         self.input_scale.setDecimals(3)
-        params_group_layout.addWidget(QLabel("Масштаб:"))
+        params_group_layout.addWidget(QLabel("Масштаб (x см на 1 пиксель):"))
         params_group_layout.addWidget(self.input_scale)
+
+        params_group_layout.addSpacing(10)
+
+        self.input_target_scale = QDoubleSpinBox()
+        self.input_target_scale.setRange(0.01, 20.0)
+        self.input_target_scale.setValue(0.5)
+        self.input_target_scale.setDecimals(3)
+        self.input_target_scale.setToolTip("Целевой масштаб изображения (см на 1 пиксель)")
+
+        params_group_layout.addWidget(QLabel("Эталон (см/px): "))
+        params_group_layout.addWidget(self.input_target_scale)
+
+        # Авто-синхронизация: масштаб для 3D (м/px) всегда = эталон (см/px) / 100
+        self.input_target_scale.valueChanged.connect(lambda v: self.input_scale.setValue(v / 100.0))
 
         params_group_layout.addSpacing(10)
 
@@ -436,16 +457,31 @@ class MainWindow(QMainWindow):
         self.editor_2d.reset_editor()
         self.editor_2d.set_background(path)
 
-        self.progress_label.setText("⏳ Обработка плана...")
-        QApplication.processEvents()  # Обновить UI перед тяжелой задачей
+        self.progress_label.setText("⏳ Масштабирование плана... ")
+        QApplication.processEvents()
 
         try:
-            _, _, regions_dict = i2w.process_floor_plan(self._plan_path)
-            i2w.calculate_and_resize_image(self._plan_path)
+            target_cm_px = self.input_target_scale.value()
+            resize_res = i2w.calculate_and_resize_image(self._plan_path, target_cm_per_pixel=target_cm_px)
+            scaled_img = resize_res['scaled_image']
+
+            # Сохраняем отмасштабированное изображение
+            self._scaled_plan_path = "temp_scaled_plan.png"
+            cv2.imwrite(self._scaled_plan_path, scaled_img)
+
+            self.progress_label.setText("⏳ Обработка плана нейросетью... ")
+            QApplication.processEvents()
+
+            # Запускаем ИИ уже на отмасштабированном изображении
+            _, _, regions_dict = i2w.process_floor_plan(self._scaled_plan_path)
+            self._raw_contours = regions_dict  # Сохраняем для воркера
         except Exception as e:
             QMessageBox.warning(self, "Ошибка ИИ", f"Не удалось обработать план: {e}")
             self.progress_label.setText("❌ Ошибка обработки")
             return
+
+        # Отображаем в 2D-редакторе уже масштабированный план
+        self.editor_2d.set_background(self._scaled_plan_path)
 
         total_regions = 0
         for cls_name, polygons in regions_dict.items():
@@ -456,7 +492,7 @@ class MainWindow(QMainWindow):
                 total_regions += 1
 
         self.editor_2d.fitInView(self.editor_2d.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
-        self.progress_label.setText(f"✅ План загружен. Найдено {total_regions} объектов.")
+        self.progress_label.setText(f"✅ План загружен. Найдено {total_regions} объектов. ")
 
     def _toggle_add_mode(self):
         self.editor_2d.set_add_mode(self.btn_add_region.isChecked())
@@ -500,11 +536,12 @@ class MainWindow(QMainWindow):
         self.progress_label.setText("🏗 Генерация модели...")
 
         self.worker = ProcessingWorker(
-            self._plan_path,
+            getattr(self, '_scaled_plan_path', self._plan_path),
             self.input_scale.value(),
             self.input_height.value(),
             edited_regions=edited_regions,
-            use_ai_walls=self.btn_type_wall.isChecked()
+            use_ai_walls=self.btn_type_wall.isChecked(),
+            precomputed_contours=getattr(self, '_raw_contours', None)
         )
         self.worker.progress.connect(self._update_progress)
         self.worker.finished.connect(self._on_finished)
