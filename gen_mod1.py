@@ -6,13 +6,12 @@ import json
 
 import img2wall as i2w
 from scipy.spatial import ConvexHull
-from trimesh.transformations import rotation_matrix, concatenate_matrices, translation_matrix
+from trimesh.transformations import rotation_matrix, concatenate_matrices
 from shapely.geometry import Polygon
 
 import logging
 
 from check_ddor import extract_wall_segments_with_ids, find_true_opening_center
-
 
 # logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
 # logger = logging.getLogger(__name__)
@@ -20,7 +19,6 @@ from check_ddor import extract_wall_segments_with_ids, find_true_opening_center
 def get_file_path(filename: str) -> Path:
     base_path = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path(__file__).parent
     return base_path / filename
-
 
 def reload_mesh_paths() -> dict:
     """
@@ -30,7 +28,6 @@ def reload_mesh_paths() -> dict:
     global obj_mesh
     obj_mesh = load_mesh_paths()
     return obj_mesh
-
 
 def clear_cache():
     """Очистка кэшей генератора 3D"""
@@ -48,7 +45,6 @@ def clear_cache():
 
     reload_mesh_paths()
     gc.collect()
-
 
 def load_mesh_paths() -> dict:
     """
@@ -83,28 +79,29 @@ def load_mesh_paths() -> dict:
         print(f"❌  Ошибка загрузки конфигурации: {e}")
         return {}
 
-
 obj_mesh = load_mesh_paths()
 
-
-def _load_mesh_safe(path: Path, default_scale: float = 1.0):
+def _load_mesh_safe(path: Path, default_scale: float = 8.0):
     """Безопасная загрузка меша с валидацией."""
     try:
         mesh = trimesh.load(path, force='mesh')
         if mesh.is_empty:
+            # logger.error(f"❌ Пустой меш: {path}")
             print(f"❌ Пустой меш: {path}")
             return None
         mesh.apply_scale(default_scale)
         mesh.fix_normals()
+        # logger.info(f"✅ Загружен меш: {path.name}, вершин: {len(mesh.vertices)}")
         print(f"✅ Загружен меш: {path.name}, вершин: {len(mesh.vertices)}")
-        print(f"   Базовые размеры: {mesh.extents}")
         return mesh
     except Exception as e:
+        # logger.error(f"❌ Ошибка загрузки {path}: {e}")
         print(f"❌ Ошибка загрузки {path}: {e}")
         return None
 
 
 def gen_floor(objects):
+
     polygon = Polygon(objects)
 
     # 4. Создаем 3D меш пола
@@ -125,349 +122,537 @@ def gen_floor(objects):
     return floor
 
 
-def _determine_object_orientation(contour):
-    """
-    Определяет ориентацию объекта по его bounding box.
 
-    Returns:
-        tuple: (is_vertical, width_px, height_px, angle_rad)
-        - is_vertical: True если высота > ширины
-        - width_px: ширина в пикселях
-        - height_px: высота в пикселях
-        - angle_rad: угол поворота вокруг Z (для вертикальных объектов)
-    """
-    width_px = abs(contour[2][0] - contour[0][0])
-    height_px = abs(contour[1][1] - contour[0][1])
-
-    is_vertical = height_px > width_px
-
-    # Для вертикальных объектов нужен поворот на 90 градусов вокруг Z
-    angle_rad = np.pi / 2 if is_vertical else 0
-
-    return is_vertical, width_px, height_px, angle_rad
-
-
-def build_obj(obj_contours, wall_contours, scale_cm_per_pixel, height_cm=270):
-    """
-    Строит 3D модели объектов (мебель, сантехника и т.д.)
-
-    Args:
-        scale_cm_per_pixel: масштаб (см/пиксель)
-        height_cm: высота помещения (для позиционирования)
-    """
+def build_obj(obj_contours, wall_contours, scale):
     scene_objects = []
+    # logging.info(f'Всё - {obj_contours}')
 
-    for class_o in obj_contours:
-        if class_o in ["Door", "Window"]:
+    for t, class_o in enumerate(obj_contours):
+        if (class_o == "Door" or class_o == "Window"):
             continue
+        if obj_mesh[class_o]:
+            logging.info(f'Tekuschiq - {class_o}')
+            mesh_obj = _load_mesh_safe(get_file_path(obj_mesh[class_o]))
 
-        if class_o not in obj_mesh or not obj_mesh[class_o]:
-            continue
+            for i, contour in enumerate(obj_contours[class_o]):
+                # logger.info(")()()()(try copy mesh)()()()()(")
+                # print(")()()()(try copy mesh)()()()()(")
 
-        print(f"\n🪑 Обработка объектов класса: {class_o}")
-        mesh_obj = _load_mesh_safe(get_file_path(obj_mesh[class_o]), default_scale=1.0)
-
-        if mesh_obj is None:
-            continue
-
-        # Базовые размеры модели
-        base_extents = mesh_obj.extents.copy()
-        print(f"   Базовые размеры модели: {base_extents}")
-
-        for i, contour in enumerate(obj_contours[class_o]):
-            try:
-                # 1. Определяем ориентацию
-                is_vertical, width_px, height_px, angle_z = _determine_object_orientation(contour)
-
-                # 2. Вычисляем размеры в см
-                width_cm = width_px * scale_cm_per_pixel
-                depth_cm = height_px * scale_cm_per_pixel
-
-                # 3. Центр объекта (в пикселях → см)
-                center_px = contour.mean(axis=0)
-                center_cm = center_px * scale_cm_per_pixel
-
-                # 4. Создаем копию меша
                 mesh = mesh_obj.copy()
+                print(")()()()( copy pass mesh)()()()()(")
 
-                # 5. Масштабируем к реальным размерам
-                # Предполагаем: X - ширина, Y - глубина, Z - высота
-                scale_x = width_cm / base_extents[0] if base_extents[0] > 0 else 1.0
-                scale_y = depth_cm / base_extents[1] if base_extents[1] > 0 else 1.0
-                # Высота остается как есть или масштабируется пропорционально
+                wight_d = contour[2][0] - contour[0][0]
+                hight_d = contour[1][1] - contour[0][1]
 
-                mesh.apply_scale([scale_x, scale_y, 1.0])
+                # ppoint = contour[0]
+                # p_ch = False
+                # for i1, contur in enumerate(wall_contours):
+                #     next_wall = wall_contours[(i1+1) % len(wall_contours)]
+                    # box_door = check_door(contur, next_wall)
+                    # for p, ponit in enumerate(box_door):
+                    #     for op in range(4):
+                    #         if abs(ponit[0] - contour[op][0]) < 8:
+                    #             # print(                            f"Точка {p} =[{ponit[0], ponit[1]}] b Точка{i1} =[{contour[op][0], contour[op][1]}] - близки X")
+                    #             # contour[op][0] = ponit[0]
+                    #             ppoint = ponit
+                    #             p_ch = True
+                    #         if abs(ponit[1] - contour[op][1]) < 8:
+                    #             # print(                            f"Точка {p} =[{ponit[0], ponit[1]}] b Точка{i1} =[{contour[op][0], contour[op][1]}] - близки Y")
+                    #             # contour[op][1] = ponit[1]
+                    #             ppoint = ponit
+                    #             p_ch = True
 
-                # 6. Строим трансформацию
-                transform = np.eye(4)
+                # print(f")()()()( kontur)()() = ()()({contour}")
 
-                # Поворот вокруг Z для вертикальных объектов
-                if angle_z > 0:
-                    rot_z = rotation_matrix(angle_z, [0, 0, 1])
-                    transform = concatenate_matrices(transform, rot_z)
+                # contour = i2w.average_close_points(contour, 300)
+                # contour = np.column_stack((contour, np.zeros(len(contour))))
 
-                # Поворот из XY плоскости (план) в XZ плоскость (3D)
-                # Объект на плане лежит в XY, в 3D должен стоять на полу (XZ)
-                rot_x = rotation_matrix(-np.pi / 2, [1, 0, 0])
-                transform = concatenate_matrices(transform, rot_x)
+                # Преобразуем контур в массив точек
+                contour_points = np.array(contour[0])
+                # print(contour_points)
+                # print(ppoint)
 
-                # 7. Позиция: центр объекта, на уровне пола
-                # После поворота вокруг X на -90°, Y становится Z
-                obj_height = mesh.extents[2]
-                position_z = obj_height / 2  # Поднимаем на половину высоты
+                # Масштабируем координаты
+                scaled = contour_points * float(scale)
+                # ppoint_s = ppoint * float(scale)
+                # print(scaled)
+                # print(ppoint_s)
+                # if wight_d > hight_d:
+                #     scaled = scaled[0], ppoint_s[1], scaled[2]
+                # else:
+                #     scaled = ppoint_s[0], scaled[1], scaled[2]
+                # print(scaled)
+                # print(scaled[0])
+                # print(translation_matrix(scaled))
 
-                transform[:3, 3] = [center_cm[0], -center_cm[1], position_z]
+                matrix_z_inversion = np.array([
+                    [1, 0, 0, 0],
+                    [0, 1, 0, 0],
+                    [0, 0, -1, 0],
+                    [0, 0, 0, 1]
+                ])
 
-                mesh.apply_transform(transform)
+                try:
+                    matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), 0  # Устанавливаем смещение
+                    # matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1] + (hight_d * float(scale))/2), 0  # Устанавливаем смещение
+                    # Создаём 2D полигон
+                    # mesh.apply_scale(8)
+                    # hight_win = mesh.extents.tolist()
+                    # if wight_d > hight_d:
+                    #     scale_win = wight_d*float(scale) / hight_win[0]
+                    #     # print("wight_d = ", wight_d*float(scale))
+                    # else:
+                    #     scale_win = hight_d*float(scale) / hight_win[0]
+                    #     # print("hight_d = ", hight_d*float(scale))
+                    # # print(hight_win)
+                    # # print(scale_win)
+                    # mesh.apply_scale([scale_win, 1, 1])
+                    rot = rotation_matrix(np.pi / 2, [-1, 0, 0])
+                    transform = concatenate_matrices(matrix_z_inversion, rot)
+                    mesh.apply_transform(transform)
+                    # # print(transform)
+                    if wight_d < hight_d:
+                        # 1. Находим его центр (bounding box центроид)
+                        center = mesh.bounding_box.centroid
 
-                scene_objects.append(mesh)
+                        # 2. Переносим в начало координат
+                        mesh.apply_translation(-center)
 
-                print(f"   ✅ {class_o} #{i + 1}: {width_cm:.1f}×{depth_cm:.1f} см, "
-                      f"ориентация: {'вертикальная' if is_vertical else 'горизонтальная'}")
+                        # 3. Поворачиваем (например, на 45° вокруг оси Z)
+                        rotation = rotation_matrix(np.pi / 2, [0, 0, 1])  # Ось Z
+                        mesh.apply_transform(rotation)
 
-            except Exception as e:
-                print(f"   ❌ Ошибка {class_o} #{i + 1}: {e}")
-                import traceback
-                traceback.print_exc()
-                continue
+                        # 4. Возвращаем на исходную позицию
+                        mesh.apply_translation(center)
+                    #
+                    # hight_door = mesh.extents.tolist()
+                    # # print(hight_door)
+                    # h_d_p = float(height) - hight_door[2]
+                    # box = trimesh.primitives.Box(extents=[hight_door[0], hight_door[1], h_d_p])
+                    # matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), float(height) - h_d_p/2 # Устанавливаем смещение
+                    #
+                    # box.apply_transform(matrix_z_inversion)
+                    #
+                    # # Добавляем в сцену
+                    # print(")()()()(try add mesh)()()()()(")
+                    scene_objects.append(mesh)
+                    # scene_objects.append(box)
 
+                    print(f"Контур {class_o} #{i + 1} успешно преобразован в 3D-объект")
+
+                except Exception as e:
+                    print(f"Ошибка обработки контура {class_o} #{i + 1}: {str(e)}")
+                    continue
     return scene_objects
 
+# def check_door(wall1, wall2):
+#     box = []
+#     for i1, point1 in enumerate(wall1):
+#         x1,y1 = point1.ravel()
+#         for i2, point2 in enumerate(wall2):
+#             x2, y2 = point2.ravel()
+#             wall_length = np.linalg.norm(point1 - point2)
+#             if ((x1 == x2) or (x1 == x2 -1) or (x1 == x2+1)) and 150.0<abs(wall_length)<220.0:
+#                 # print(f"Точка {i1} =[{x1, y1}] b Точка{i2} =[{x2, y2}]: длина стены = {wall_length:.2f} м")
+#                 box.append(point1)
+#                 box.append(point2)
+#                 # print(point2)
+#                 # print(point1)
+#             else:
+#                 if ((y1 == y2) or (y1 == y2 -1) or (y1 == y2+1)) and 150.0<abs(wall_length)<220.0:
+#                     # print(f"Точка {i1} =[{x1, y1}] b Точка{i2} =[{x2, y2 }]: длина стены = {wall_length:.2f} м")
+#                     box.append(point1)
+#                     box.append(point2)
+#                     # print(point2)
+#                     # print(point1)
+#     # print("door")
+#     # print(box)
+#     return box
 
-def build_door(door_contours, wall_contours, scale_cm_per_pixel, height_cm=270):
-    """
-    Строит 3D модели дверей
+# def build_object(obj_contours, wall_contours, scale, height = 2.7):
 
-    Args:
-        scale_cm_per_pixel: масштаб (см/пиксель)
-        height_cm: высота помещения (см)
-    """
+def build_door(door_contours, wall_contours, scale, height = 2.7):
     scene_objects = []
     segments = extract_wall_segments_with_ids(wall_contours)
-
-    mesh_door = _load_mesh_safe(get_file_path(obj_mesh['Door']), default_scale=1.0)
-    if mesh_door is None:
-        print("❌ Не загружена модель двери")
-        return []
-
-    print(f"\n🚪 Построение дверей...")
-    base_extents = mesh_door.extents.copy()
-    print(f"   Базовые размеры модели: {base_extents}")
-
+    mesh_door = _load_mesh_safe(get_file_path(obj_mesh['Door']), 1)
     for i, contour in enumerate(door_contours):
+        mesh = mesh_door.copy()
+        wight_d = contour[2][0] - contour[0][0]
+        hight_d = contour[1][1] - contour[0][1]
+
+        # ppoint = contour[0]
+        # p_ch = False
+        # for i1, contur in enumerate(wall_contours):
+        #     next_wall = wall_contours[(i1+1) % len(wall_contours)]
+            # box_door = check_door(contur, next_wall)
+            # for p, ponit in enumerate(box_door):
+            #     for op in range(4):
+            #         if abs(ponit[0] - contour[op][0]) < 8:
+            #             # print(                            f"Точка {p} =[{ponit[0], ponit[1]}] b Точка{i1} =[{contour[op][0], contour[op][1]}] - близки X")
+            #             # contour[op][0] = ponit[0]
+            #             ppoint = ponit
+            #             p_ch = True
+            #         if abs(ponit[1] - contour[op][1]) < 8:
+            #             # print(                            f"Точка {p} =[{ponit[0], ponit[1]}] b Точка{i1} =[{contour[op][0], contour[op][1]}] - близки Y")
+            #             # contour[op][1] = ponit[1]
+            #             ppoint = ponit
+            #             p_ch = True
+
+        contour = i2w.average_close_points(contour, 300)
+        contour = np.column_stack((contour, np.zeros(len(contour))))
+
+        # Преобразуем контур в массив точек
+        contour_points = np.array(contour[0])
+        # print(contour_points)
+        # print(ppoint)
+
+        # Масштабируем координаты
+        scaled = contour_points * float(scale)
+        # ppoint_s = ppoint * float(scale)
+        # print(scaled)
+        # print(ppoint_s)
+        # if wight_d > hight_d and p_ch:
+        #     scaled = scaled[0], ppoint_s[1], scaled[2]
+        # if wight_d < hight_d and p_ch:
+        #     scaled = ppoint_s[0], scaled[1], scaled[2]
+        # print(scaled)
+        # print(scaled[0])
+        # print(translation_matrix(scaled))
+
+        matrix_z_inversion = np.array([
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, -1, 0],
+            [0, 0, 0, 1]
+        ])
+
         try:
-            # 1. Определяем ориентацию
-            is_vertical, width_px, thickness_px, _ = _determine_object_orientation(contour)
-
-            # 2. Размеры в см
-            width_cm = width_px * scale_cm_per_pixel
-            thickness_cm = thickness_px * scale_cm_per_pixel
-            door_height_cm = 200  # Стандартная высота двери 200 см
-
-            # 3. Центр двери (в пикселях → см)
-            center_px = contour.mean(axis=0)
-            center_cm = center_px * scale_cm_per_pixel
-
-            # 4. Копия меша
-            mesh = mesh_door.copy()
-
-            # 5. Масштабирование
-            scale_x = width_cm / base_extents[0] if base_extents[0] > 0 else 1.0
-            scale_y = thickness_cm / base_extents[1] if base_extents[1] > 0 else 1.0
-            scale_z = door_height_cm / base_extents[2] if base_extents[2] > 0 else 1.0
-
-            mesh.apply_scale([scale_x, scale_y, scale_z])
-
-            # 6. Трансформация
-            transform = np.eye(4)
-
-            # Для вертикальных дверей (когда thickness > width на плане)
-            # нужен дополнительный поворот
-            if is_vertical:
-                rot_z = rotation_matrix(np.pi / 2, [0, 0, 1])
-                transform = concatenate_matrices(transform, rot_z)
-
-            # Поворот из XY (план) в XZ (3D, дверь стоит вертикально)
-            rot_x = rotation_matrix(-np.pi / 2, [1, 0, 0])
-            transform = concatenate_matrices(transform, rot_x)
-
-            # 7. Позиция: дверь стоит на полу
-            position_z = door_height_cm / 2  # Центр двери по высоте
-
-            transform[:3, 3] = [center_cm[0], -center_cm[1], position_z]
-
+            matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), 0  # Устанавливаем смещение
+            # matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1] + (hight_d * float(scale))/2), 0  # Устанавливаем смещение
+            # Создаём 2D полигон
+            mesh.apply_scale(8)
+            hight_win = mesh.extents.tolist()
+            if wight_d > hight_d:
+                scale_win = wight_d*float(scale) / hight_win[0]
+                # print("wight_d = ", wight_d*float(scale))
+            else:
+                scale_win = hight_d*float(scale) / hight_win[0]
+                # print("hight_d = ", hight_d*float(scale))
+            # print(hight_win)
+            # print(scale_win)
+            mesh.apply_scale([scale_win, 1, 1])
+            rot = rotation_matrix(np.pi / 2, [-1, 0, 0])
+            transform = concatenate_matrices(matrix_z_inversion, rot)
             mesh.apply_transform(transform)
+            # print(transform)
+            if wight_d < hight_d:
+                # 1. Находим его центр (bounding box центроид)
+                center = mesh.bounding_box.centroid
 
-            # 8. Заполнитель стены над дверью (если нужно)
-            # Для простоты пока не добавляем
+                # 2. Переносим в начало координат
+                mesh.apply_translation(-center)
 
+                # 3. Поворачиваем (например, на 45° вокруг оси Z)
+                rotation = rotation_matrix(np.pi / 2, [0, 0, 1])  # Ось Z
+                mesh.apply_transform(rotation)
+
+                # 4. Возвращаем на исходную позицию
+                # print(f"центр пов{center}")
+                mesh.apply_translation(center)
+
+            # Находим центр двери (в пикселях)
+            door_center_px = np.array([
+                (contour[:, 0].min() + contour[:, 0].max()) / 2,
+                (contour[:, 1].min() + contour[:, 1].max()) / 2
+            ])
+
+            # === 2. Привязка к проёму в стене ===
+            result = find_true_opening_center(door_center_px, segments, search_radius=300)
+
+            if result:
+                # Используем центр проёма, а не детектированный центр двери
+                final_center_px = np.array(result['center_px'])
+                door_angle_rad = np.radians(result['angle_deg'])
+                opening_width_px = result['opening_width_px']
+                # print(f"Дверь #{i + 1}: центр проёма {final_center_px}, Ширина проёма: {opening_width_px}, угол {door_angle_rad}°")
+            else:
+                # Если проём не найден, используем центр детектированной двери
+                final_center_px = door_center_px
+                door_angle_rad = 0
+                opening_width_px = wight_d
+                # print(f"Дверь #{i + 1}: проём не найден, используем детектированный центр")
+                # print(f"Дверь #{i + 1}: центр проёма {final_center_px}, Ширина проёма: {opening_width_px}, угол {door_angle_rad}°")
+
+            # === 3. Масштабирование в мировые координаты ===
+            final_center_world = final_center_px * float(scale)
+            door_width_world = wight_d * float(scale)
+            door_height_world = hight_d * float(scale)
+            # print(f"Дверь #{i + 1}: центр проёма {final_center_world}, Ширина проёма: {door_width_world}, hight {door_height_world}°")
+
+
+            hight_door = mesh.extents.tolist()
+            # print(hight_door)
+            h_d_p = float(height) - hight_door[2]
+            box = trimesh.primitives.Box(extents=[hight_door[0], hight_door[1], h_d_p])
+            matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), float(height) - h_d_p/2 # Устанавливаем смещение
+
+            box.apply_transform(matrix_z_inversion)
+
+            # Добавляем в сцену
             scene_objects.append(mesh)
+            scene_objects.append(box)
 
-            print(f"   ✅ Дверь #{i + 1}: {width_cm:.1f}×{thickness_cm:.1f}×{door_height_cm} см, "
-                  f"ориентация: {'вертикальная' if is_vertical else 'горизонтальная'}")
+            print(f"Контур DOOR #{i + 1} успешно преобразован в 3D-объект")
 
         except Exception as e:
-            print(f"   ❌ Ошибка двери #{i + 1}: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Ошибка обработки контура DOOR #{i + 1}: {str(e)}")
             continue
-
     return scene_objects
 
-
-def build_window(window_position, wall_contours, scale_cm_per_pixel, height_cm=270):
-    """
-    Строит 3D модели окон
-
-    Args:
-        scale_cm_per_pixel: масштаб (см/пиксель)
-        height_cm: высота помещения (см)
-    """
+def build_window(window_position, wall_contours, scale, height = 2.7):
     scene_objects = []
-
-    mesh_window = _load_mesh_safe(get_file_path(obj_mesh['Window']), default_scale=1.0)
-    if mesh_window is None:
-        print("❌ Не загружена модель окна")
-        return []
-
-    print(f"\n🪟 Построение окон...")
-    base_extents = mesh_window.extents.copy()
-    print(f"   Базовые размеры модели: {base_extents}")
-
-    window_sill_height_cm = 90  # Высота подоконника от пола
-    window_height_cm = 150  # Стандартная высота окна
-
+    mesh_window = _load_mesh_safe(get_file_path(obj_mesh['Window']), 1)
     for i, contour in enumerate(window_position):
+        win_mesh = mesh_window.copy()
+        wight_d = contour[2][0] - contour[0][0]
+        hight_d = contour[1][1] - contour[0][1]
+
+        contour = i2w.average_close_points(contour, 300)
+        contour = np.column_stack((contour, np.zeros(len(contour))))
+
+        # print(contour)
+        # Преобразуем контур в массив точек
+        contour_points = np.array(contour[0])
+
+        # Масштабируем координаты
+        scaled = contour_points * float(scale)
+        # print(scaled)
+        # print(scaled[0])
+        # print(translation_matrix(scaled))
+
+        matrix_z_inversion = np.array([
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, -1, 0],
+            [0, 0, 0, 1]
+        ])
+
         try:
-            # 1. Определяем ориентацию
-            is_vertical, width_px, thickness_px, _ = _determine_object_orientation(contour)
+            matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), float(height)/2  # Устанавливаем смещение
+            # matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1] + (hight_d * float(scale))/2), 0  # Устанавливаем смещение
+            # Создаём 2D полигон
+            win_mesh.apply_scale(0.1)
+            hight_win = win_mesh.extents.tolist()
+            if wight_d > hight_d:
+                scale_win = wight_d*float(scale) / hight_win[2]
+                # print("wight_d = ", wight_d)
+            else:
+                scale_win = hight_d*float(scale) / hight_win[2]
+                # print("hight_d = ", hight_d)
+            # print(hight_win)
+            # print(scale_win)
+            win_mesh.apply_scale([1, 1, scale_win])
+            rot = rotation_matrix(np.pi / 2, [-1, 0, 0])
+            rot1 = rotation_matrix(np.pi / 2, [0, 1, 0])
+            transform = concatenate_matrices(matrix_z_inversion, rot)
+            transform = concatenate_matrices(transform, rot1)
+            win_mesh.apply_transform(transform)
 
-            # 2. Размеры в см
-            width_cm = width_px * scale_cm_per_pixel
-            thickness_cm = thickness_px * scale_cm_per_pixel
 
-            # 3. Центр окна
-            center_px = contour.mean(axis=0)
-            center_cm = center_px * scale_cm_per_pixel
+            # print(transform)
+            if wight_d < hight_d:
+                # 1. Находим его центр (bounding box центроид)
+                center = win_mesh.bounding_box.centroid
 
-            # 4. Копия меша
-            mesh = mesh_window.copy()
+                # 2. Переносим в начало координат
+                win_mesh.apply_translation(-center)
 
-            # 5. Масштабирование
-            scale_x = width_cm / base_extents[0] if base_extents[0] > 0 else 1.0
-            scale_y = thickness_cm / base_extents[1] if base_extents[1] > 0 else 1.0
-            scale_z = window_height_cm / base_extents[2] if base_extents[2] > 0 else 1.0
+                # 3. Поворачиваем (например, на 45° вокруг оси Z)
+                rotation = rotation_matrix(np.pi / 2, [0, 0, 1])  # Ось Z
+                win_mesh.apply_transform(rotation)
 
-            mesh.apply_scale([scale_x, scale_y, scale_z])
+                # 4. Возвращаем на исходную позицию
+                win_mesh.apply_translation(center)
 
-            # 6. Трансформация
-            transform = np.eye(4)
+            # Добавляем в сцену
+            hight_win = win_mesh.extents.tolist()
+            hight_win[2] = round(hight_win[2], 3)
 
-            # Для вертикальных окон
-            if is_vertical:
-                rot_z = rotation_matrix(np.pi / 2, [0, 0, 1])
-                transform = concatenate_matrices(transform, rot_z)
+            # print(hight_win)
+            b_w_p = float(height)/2
+            b_w_p = round(b_w_p, 3)
+            h_w_p = float(height) - hight_win[2] - b_w_p
+            h_w_p = round(h_w_p, 3)
 
-            # Поворот из XY в XZ
-            rot_x = rotation_matrix(-np.pi / 2, [1, 0, 0])
-            transform = concatenate_matrices(transform, rot_x)
+            # print(f"высота = {height}, высота снизу = {b_w_p}, высота сверху = {h_w_p}, высота окна = {hight_win[2]}, высота сверху1 = {float(height) - h_w_p/2}")
+            transformation = np.eye(4)
+            box11 = trimesh.primitives.Box(extents=[hight_win[0], hight_win[1], h_w_p])
+            h_w_p = float(height) - h_w_p/2
+            transformation[:3, 3] = scaled[0], -(scaled[1]), h_w_p # Устанавливаем смещение
+            box11.apply_transform(transformation)
+            # print(box11.bounds)
 
-            # Дополнительный поворот для правильной ориентации окна в стене
-            rot_y = rotation_matrix(np.pi / 2, [0, 1, 0])
-            transform = concatenate_matrices(transform, rot_y)
+            transformation = np.eye(4)
+            box2 = trimesh.primitives.Box(extents=[hight_win[0], hight_win[1], b_w_p])
+            transformation[:3, 3] = scaled[0], -(scaled[1]), b_w_p/2 # Устанавливаем смещение float(height) - h_d_p/2
+            box2.apply_transform(transformation)
 
-            # 7. Позиция: на высоте подоконника
-            position_z = window_sill_height_cm + (window_height_cm / 2)
+            scene_objects.append(win_mesh)
+            scene_objects.append(box11)
+            scene_objects.append(box2)
 
-            transform[:3, 3] = [center_cm[0], -center_cm[1], position_z]
-
-            mesh.apply_transform(transform)
-
-            scene_objects.append(mesh)
-
-            print(f"   ✅ Окно #{i + 1}: {width_cm:.1f}×{thickness_cm:.1f}×{window_height_cm} см, "
-                  f"подоконник: {window_sill_height_cm} см")
+            print(f"Контур Window #{i + 1} успешно преобразован в 3D-объект")
 
         except Exception as e:
-            print(f"   ❌ Ошибка окна #{i + 1}: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Ошибка обработки контура Window #{i + 1}: {str(e)}")
             continue
 
     return scene_objects
 
 
-def build_3d_model(wall_contours, scale_cm_per_pixel, height_cm=270):
+
+# import numpy as np
+# import trimesh
+# from trimesh.transformations import rotation_matrix, translation_matrix, concatenate_matrices
+#
+
+#
+# def build_opening(contours, base_mesh, scale: float, height: float = 2.7, is_door: bool = True, min_h: float = 0.9):
+#     # float = 0.9
+#     scene_objects = []
+#     for i, contour in enumerate(contours):
+#         try:
+#             # 1. Подготовка контура
+#             # pts = np.array(i2w.average_close_points(contour, 300))
+#             width = abs(contour[2, 0] - contour[0, 0])
+#             height_obj = abs(contour[1, 1] - contour[0, 1])
+#
+#             # 2. Базовая позиция (центр проёма)
+#             center_2d = contour.mean(axis=0)
+#             pos = [center_2d[0] * scale, -center_2d[1] * scale, 0.0]
+#
+#             # 3. Композиция трансформаций
+#             T = translation_matrix(pos)
+#             rot = rotation_matrix(np.pi / 2, [-1, 0, 0])
+#             T = concatenate_matrices(T, rot)
+#
+#             if width < height_obj:
+#                 rot_z = rotation_matrix(np.pi / 2, [0, 0, 1])
+#                 T = concatenate_matrices(T, rot_z)
+#
+#             # 4. Масштабирование
+#             mesh = base_mesh.copy()
+#             extents = mesh.extents  # вычисляется 1 раз
+#             scale_factor = (width * scale) / extents[0] if is_door else (height_obj * scale) / extents[2]
+#             S = np.diag([scale_factor, 1.0, 1.0] if is_door else [1.0, 1.0, scale_factor])
+#             T[:3, :3] = T[:3, :3] @ S
+#
+#             mesh.apply_transform(T)
+#
+#             # 5. Заполнители (стена над/под проёмом)
+#             if is_door:
+#                 h_clear = height - mesh.extents[2]
+#                 filler = trimesh.primitives.Box(extents=[mesh.extents[0], mesh.extents[1], h_clear])
+#                 filler.apply_transform(translation_matrix([pos[0], pos[1], height - h_clear / 2]))
+#                 scene_objects.extend([mesh, filler])
+#             else:
+#                 logging.debug(f"Проем #{mesh.extents}")
+#                 h_clear = height - (mesh.extents[2] + min_h)
+#                 logging.debug(f"h_clear #{h_clear}")
+#                 filler1 = trimesh.primitives.Box(extents=[mesh.extents[0], mesh.extents[1], h_clear])
+#                 filler2 = trimesh.primitives.Box(extents=[mesh.extents[0], mesh.extents[1], h_clear])
+#                 filler1.apply_transform(translation_matrix([pos[0], pos[1], height - h_clear / 2]))
+#                 filler2.apply_transform(translation_matrix([pos[0], pos[1], height - h_clear / 2]))
+#                 scene_objects.extend([mesh, filler1, filler2])
+#
+#             logging.info(f"Проем #{i + 1} построен успешно")
+#         except Exception as e:
+#             logging.error(f"Ошибка в проеме #{i + 1}: {e}")
+#             continue
+#     return scene_objects
+
+def build_3d_model(wall_contours, scale=0.1, height=3.0):
     """
     Строит 3D-модель помещения экструдированием контуров стен
-
-    Args:
-        wall_contours: Контуры стен из обработки изображения
-        scale_cm_per_pixel: Масштаб преобразования (см/пиксель)
-        height_cm: Высота помещения в см (по умолчанию 270 см = 2.7 м)
-
-    Returns:
-        trimesh.Scene: Сцена с 3D-моделью
+    :param wall_contours: Контуры стен из обработки изображения
+    :param original_size: Исходные размеры изображения (height, width)
+    :param scale: Масштаб преобразования (пиксели в метры)
+    :param height: Высота помещения в метрах
+    :return: Сцена с 3D-моделью (trimesh.Scene)
     """
+
     scene_objects = []
     all_cont = []
 
-    print(f"\n🏗️ Построение стен...")
-    print(f"   Масштаб: 1 px = {scale_cm_per_pixel:.4f} см")
-    print(f"   Высота стен: {height_cm} см")
+
 
     for i, contour in enumerate(wall_contours):
+        # Преобразуем контур в массив точек
+        contour_points = np.array(contour).reshape(-1, 2)
+
+        # Упрощаем контур
+        contour_points = contour_points.reshape(-1, 1, 2).astype(np.int32).squeeze()
+
+        # Пропускаем контуры с малым количеством точек
+        if len(contour_points) < 3:
+            print(f"Контур #{i + 1} пропущен (мало точек: {len(contour_points)})")
+            continue
+
+
+
+        # Масштабируем координаты
+        scaled = contour_points * float(scale)
+        # print(scaled)
+        all_cont.append(scaled)
+
+
+        # Замыкаем контур при необходимости
+        if not np.allclose(scaled[0], scaled[-1]):
+            scaled = np.vstack([scaled, scaled[0]])
+
+        matrix_z_inversion = np.array([
+            [1, 0, 0, 0],
+            [0, -1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1]
+        ])
+
+        # Apply the transformation to the mesh vertices
+
         try:
-            # Преобразуем контур в массив точек
-            contour_points = np.array(contour).reshape(-1, 2)
+            # Создаём 2D полигон
+            polygon = trimesh.path.polygons.Polygon(scaled)
+            # print("стена = ",scaled)
+            # print("dscjnf стена = ", height)
 
-            # Масштабируем координаты: пиксели → см
-            scaled_cm = contour_points * scale_cm_per_pixel
+            # Экструдируем в 3D
+            mesh = trimesh.creation.extrude_polygon(polygon, height=height)
+            mesh.apply_transform(matrix_z_inversion)
 
-            # Замыкаем контур при необходимости
-            if not np.allclose(scaled_cm[0], scaled_cm[-1]):
-                scaled_cm = np.vstack([scaled_cm, scaled_cm[0]])
-
-            all_cont.append(scaled_cm)
-
-            # Создаём 2D полигон (координаты в см)
-            polygon = trimesh.path.polygons.Polygon(scaled_cm)
-
-            # Экструдируем в 3D (высота в см)
-            mesh = trimesh.creation.extrude_polygon(polygon, height=height_cm)
-
-            # Инвертируем Y и Z для правильной ориентации
-            # Image coords: Y вниз → World coords: Y вверх
-            # Z вверх
-            matrix_transform = np.array([
-                [1, 0, 0, 0],  # X остается
-                [0, -1, 0, 0],  # Y инвертируется
-                [0, 0, -1, 0],  # Z инвертируется (вверх)
-                [0, 0, 0, 1]
-            ])
-            mesh.apply_transform(matrix_transform)
-
+            # Добавляем в сцену
             scene_objects.append(mesh)
 
-            print(f"   ✅ Стена #{i + 1}: {len(scaled_cm)} точек, "
-                  f"размеры: {scaled_cm[:, 0].max() - scaled_cm[:, 0].min():.1f}×"
-                  f"{scaled_cm[:, 1].max() - scaled_cm[:, 1].min():.1f} см")
+            print(f"Контур #{i + 1} успешно преобразован в 3D-объект")
 
         except Exception as e:
-            print(f"   ❌ Ошибка стены #{i + 1}: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Ошибка обработки контура #{i + 1}: {str(e)}")
             continue
 
     if not scene_objects:
-        raise ValueError("Не удалось создать ни одной стены!")
+        raise ValueError("Не удалось создать ни одного 3D-объекта!")
 
-    # Создаем пол
-    if all_cont:
-        all_cont = np.vstack(all_cont)
-        hull = ConvexHull(all_cont)
-        floor_contour = all_cont[hull.vertices]
-        floor_contour = np.vstack([floor_contour, floor_contour[0]])
-        scene_objects.append(gen_floor(floor_contour))
+    # print(all_cont)
+    all_cont = np.vstack(all_cont)
+
+    # Находим выпуклую оболочку
+    hull = ConvexHull(all_cont)
+
+    # Получаем точки выпуклой оболочки (уже упорядочены)
+    kr_p = all_cont[hull.vertices]
+
+    # Замыкаем контур (добавляем первую точку в конец)
+    kr_p = np.vstack([kr_p, kr_p[0]])
+
+    scene_objects.append(gen_floor(kr_p))
 
     return trimesh.Scene(scene_objects)

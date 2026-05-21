@@ -567,7 +567,8 @@ def process_floor_plan_with_scaling(image_path, border_size=20, target_cm_per_pi
         target_cm_per_pixel: Целевой масштаб (см/пиксель)
 
     Returns:
-        wall_contours, original_size, obj_contours, cm_per_pixel, scaled_image
+        wall_contours, original_size, obj_contours, cm_per_pixel
+        (БЕЗ scaled_image - оно уже возвращено через calculate_and_resize_image)
     """
     global classes_dict
 
@@ -592,83 +593,89 @@ def process_floor_plan_with_scaling(image_path, border_size=20, target_cm_per_pi
         temp_path = tmp.name
         cv2.imwrite(temp_path, scaled_image)
 
-    # 3. Обрабатываем масштабированное изображение
-    print("\n" + "=" * 60)
-    print("📐 ЭТАП 2: ОБРАБОТКА МАСШТАБИРОВАННОГО ПЛАНА")
-    print("=" * 60)
+    try:
+        # 3. Обрабатываем масштабированное изображение
+        print("\n" + "=" * 60)
+        print("📐 ЭТАП 2: ОБРАБОТКА МАСШТАБИРОВАННОГО ПЛАНА")
+        print("=" * 60)
 
-    # Очищаем кэш
-    classes_dict = {key: [] for key in classes_dict}
+        # Очищаем кэш
+        classes_dict = {key: [] for key in classes_dict}
 
-    # Детектируем объекты на масштабированном изображении
-    from check_img_ai_v2 import get_coord
+        # Детектируем объекты на масштабированном изображении
+        from check_img_ai_v2 import get_coord
 
-    detections, labels = get_coord(temp_path)
+        detections, labels = get_coord(temp_path)
 
-    for i in range(len(detections)):
-        xyxy_tensor = detections[i].xyxy.cpu()
-        xyxy = xyxy_tensor.numpy().squeeze()
-        xmin, ymin, xmax, ymax = xyxy.astype(int)
+        for i in range(len(detections)):
+            xyxy_tensor = detections[i].xyxy.cpu()
+            xyxy = xyxy_tensor.numpy().squeeze()
+            xmin, ymin, xmax, ymax = xyxy.astype(int)
 
-        # Добавляем border_size
-        xy1 = (xmin + border_size, ymin + border_size)
-        xy2 = (xmin + border_size, ymax + border_size)
-        xy3 = (xmax + border_size, ymax + border_size)
-        xy4 = (xmax + border_size, ymin + border_size)
+            # Добавляем border_size
+            xy1 = (xmin + border_size, ymin + border_size)
+            xy2 = (xmin + border_size, ymax + border_size)
+            xy3 = (xmax + border_size, ymax + border_size)
+            xy4 = (xmax + border_size, ymin + border_size)
 
-        classidx = int(detections[i].cls.item())
-        classname = labels[classidx]
+            classidx = int(detections[i].cls.item())
+            classname = labels[classidx]
 
-        if classname in classes_dict:
-            contour = np.array([xy1, xy2, xy3, xy4])
-            classes_dict[classname].append(contour)
+            if classname in classes_dict:
+                contour = np.array([xy1, xy2, xy3, xy4])
+                classes_dict[classname].append(contour)
 
-    # 4. Обрабатываем стены (как раньше)
-    original_height, original_width = scaled_image.shape[:2]
-    bordered_image = add_white_border(scaled_image, border_size)
+        # 4. Обрабатываем стены (как раньше)
+        original_height, original_width = scaled_image.shape[:2]
+        bordered_image = add_white_border(scaled_image, border_size)
 
-    gray_image = cv2.cvtColor(bordered_image, cv2.COLOR_BGR2GRAY)
-    processed_image = apply_adaptive_threshold(gray_image)
+        gray_image = cv2.cvtColor(bordered_image, cv2.COLOR_BGR2GRAY)
+        processed_image = apply_adaptive_threshold(gray_image)
 
-    # Морфология и очистка
-    kernel = np.ones((5, 5), np.uint8)
-    cleaned_image = cv2.morphologyEx(processed_image, cv2.MORPH_CLOSE, kernel, iterations=1)
+        # Морфология и очистка
+        kernel = np.ones((5, 5), np.uint8)
+        cleaned_image = cv2.morphologyEx(processed_image, cv2.MORPH_CLOSE, kernel, iterations=1)
 
-    # Поиск контуров стен
-    contours_wall, _ = cv2.findContours(cleaned_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        # Поиск контуров стен
+        contours_wall, _ = cv2.findContours(cleaned_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Фильтрация
-    filtered_contours_wall = []
-    border_margin = 10
-    image_height, image_width = cleaned_image.shape
+        # Фильтрация
+        filtered_contours_wall = []
+        border_margin = 10
+        image_height, image_width = cleaned_image.shape
 
-    for contour in contours_wall:
-        contour = contour.reshape(-1, 2)
-        x, y, w, h = cv2.boundingRect(contour)
+        for contour in contours_wall:
+            contour = contour.reshape(-1, 2)
+            x, y, w, h = cv2.boundingRect(contour)
 
-        if (x > border_size + border_margin and
-                y > border_size + border_margin and
-                (x + w) < (image_width - border_size - border_margin) and
-                (y + h) < (image_height - border_size - border_margin)):
-            filtered_contours_wall.append(contour)
+            if (x > border_size + border_margin and
+                    y > border_size + border_margin and
+                    (x + w) < (image_width - border_size - border_margin) and
+                    (y + h) < (image_height - border_size - border_margin)):
+                filtered_contours_wall.append(contour)
 
-    # Усреднение точек
-    filtered_contours_wall = average_close2points(filtered_contours_wall, 4)
+        # Усреднение точек
+        filtered_contours_wall = average_close2points(filtered_contours_wall, 4)
 
-    # Корректировка координат (убираем border_size)
-    wall_contours = [cnt - border_size for cnt in filtered_contours_wall]
+        # Корректировка координат (убираем border_size)
+        wall_contours = [cnt - border_size for cnt in filtered_contours_wall]
 
-    # Корректируем координаты объектов
-    for key in classes_dict:
-        classes_dict[key] = [cnt - border_size for cnt in classes_dict[key]]
+        # Корректируем координаты объектов
+        for key in classes_dict:
+            classes_dict[key] = [cnt - border_size for cnt in classes_dict[key]]
 
-    # Удаляем временный файл
-    import os
-    os.unlink(temp_path)
+        print(f"\n✅ Обработка завершена!")
+        print(f"   Найдено стен: {len(wall_contours)}")
+        print(f"   Найдено объектов: {sum(len(v) for v in classes_dict.values())}")
+        print(f"   Масштаб: 1 px = {cm_per_pixel:.4f} см")
 
-    print(f"\n✅ Обработка завершена!")
-    print(f"   Найдено стен: {len(wall_contours)}")
-    print(f"   Найдено объектов: {sum(len(v) for v in classes_dict.values())}")
-    print(f"   Масштаб: 1 px = {cm_per_pixel:.4f} см")
+        # ВОЗВРАЩАЕМ 4 ЗНАЧЕНИЯ (без scaled_image)
+        return wall_contours, (original_height, original_width), classes_dict, cm_per_pixel
 
-    return wall_contours, (original_height, original_width), classes_dict, cm_per_pixel, scaled_image
+    finally:
+        # Удаляем временный файл
+        import os
+        try:
+            os.unlink(temp_path)
+        except:
+            pass
