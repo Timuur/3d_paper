@@ -2,6 +2,7 @@ import sys
 import os
 from typing import Optional
 import numpy as np
+from pathlib import Path
 
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal, QRectF, QPointF, QThread
@@ -11,6 +12,10 @@ import trimesh
 import pyvista as pv
 from pyvistaqt import QtInteractor
 import cv2
+
+import logging
+logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
 
 
 import img2wall as i2w
@@ -22,11 +27,13 @@ class ProcessingWorker(QThread):
     finished = Signal(object)
     error = Signal(str)
 
-    def __init__(self, plan_path: str, scale: float, wall_height: float,
-                 edited_regions: Optional[dict] = None, use_ai_walls: bool = False, precomputed_contours: Optional[dict] = None):
+    def __init__(self, plan_path: str, scale: float, wall_height: float, axis_tol: int, gap_tol: int, edited_regions: Optional[dict] = None, precomputed_contours: Optional[dict] = None, use_ai_walls: bool = False):
         super().__init__()
         self.plan_path = plan_path
         self.scale = scale
+        self.axis_tol = axis_tol
+        # self.thick_tol = thick_tol
+        self.gap_tol = gap_tol
         self.wall_height = wall_height * 7.14  # коэффициент масштабирования
         self.edited_regions: Optional[dict] = edited_regions
         self.use_ai_walls = use_ai_walls  # 🔧 FIX: принимаем состояние переключателя
@@ -39,7 +46,7 @@ class ProcessingWorker(QThread):
             if self.precomputed_contours:
                 raw_contours = self.precomputed_contours
 
-            wall_contours_cv, image_size, raw_contours = i2w.process_floor_plan(self.plan_path)
+            wall_contours_cv, image_size, raw_contours = i2w.process_floor_plan(self.plan_path,20, True, self.axis_tol, 5, self.gap_tol)
 
             contours = self.edited_regions if self.edited_regions else raw_contours
 
@@ -352,7 +359,7 @@ class MainWindow(QMainWindow):
         self.input_scale.setRange(0.001, 10.0)
         self.input_scale.setValue(0.05)
         self.input_scale.setDecimals(3)
-        params_group_layout.addWidget(QLabel("Масштаб (x см на 1 пиксель):"))
+        params_group_layout.addWidget(QLabel("Масштаб:"))
         params_group_layout.addWidget(self.input_scale)
 
         params_group_layout.addSpacing(10)
@@ -378,6 +385,28 @@ class MainWindow(QMainWindow):
         params_group_layout.addWidget(QLabel("Высота:"))
         params_group_layout.addWidget(self.input_height)
 
+        self.input_axis_tol = QSpinBox()
+        self.input_axis_tol.setRange(0, 30.0)
+        self.input_axis_tol.setValue(5)
+        params_group_layout.addWidget(QLabel("Допуск смещения оси:"))
+        params_group_layout.addWidget(self.input_axis_tol)
+
+        params_group_layout.addSpacing(10)
+
+        # self.input_thick_tol = QSpinBox()
+        # self.input_thick_tol.setRange(0, 100.0)
+        # self.input_thick_tol.setValue(5)
+        # params_group_layout.addWidget(QLabel("Допуск разницы толщины:"))
+        # params_group_layout.addWidget(self.input_thick_tol)
+        # params_group_layout.addSpacing(10)
+
+        self.input_gap_tol = QSpinBox()
+        self.input_gap_tol.setRange(0, 500.0)
+        self.input_gap_tol.setValue(250)
+        params_group_layout.addWidget(QLabel("Максимальный разрыв для объединения:"))
+        params_group_layout.addWidget(self.input_gap_tol)
+
+        params_group_layout.addSpacing(10)
         params_actions_layout.addWidget(params_group, 0)  # Фиксированный размер
 
         params_actions_layout.addStretch()
@@ -390,6 +419,18 @@ class MainWindow(QMainWindow):
         self.btn_run.setStyleSheet(
             "background-color: #2196F3; color: white; font-weight: bold; padding: 5px 15px; border-radius: 3px;")
         actions_group.addWidget(self.btn_run)
+
+        self.chk_optimize = QCheckBox("🗜 Оптимизировать")
+        self.chk_optimize.setChecked(True)
+        self.chk_optimize.setToolTip("Сжать геометрию и текстуры для веба (меньше размер, чуть дольше)")
+        actions_group.addWidget(self.chk_optimize)
+
+        self.btn_export_gltf = QPushButton("🌐 GLTF")
+        self.btn_export_gltf.setEnabled(False)
+        self.btn_export_gltf.clicked.connect(self._export_gltf)
+        self.btn_export_gltf.setStyleSheet(
+            "background-color: #4CAF50; color: white; font-weight: bold; padding: 5px 12px; border-radius: 3px;")
+        actions_group.addWidget(self.btn_export_gltf)
 
         self.btn_save = QPushButton("💾 OBJ")
         self.btn_save.setEnabled(False)
@@ -539,6 +580,9 @@ class MainWindow(QMainWindow):
             getattr(self, '_scaled_plan_path', self._plan_path),
             self.input_scale.value(),
             self.input_height.value(),
+            self.input_axis_tol.value(),
+            # self.input_height.value(),
+            self.input_gap_tol.value(),
             edited_regions=edited_regions,
             use_ai_walls=self.btn_type_wall.isChecked(),
             precomputed_contours=getattr(self, '_raw_contours', None)
@@ -572,6 +616,7 @@ class MainWindow(QMainWindow):
         self.progress_label.setText("✅ Модель построена")
         self.btn_run.setEnabled(True)
         self.btn_save.setEnabled(True)
+        self.btn_export_gltf.setEnabled(True)
 
     def _on_error(self, msg: str):
         self.progress_label.setText(f"❌ Ошибка: {msg}")
@@ -588,6 +633,69 @@ class MainWindow(QMainWindow):
                 self.progress_label.setText(f"💾 Сохранено в {os.path.basename(path)}")
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка экспорта", str(e))
+
+    def _export_gltf(self):
+        """Экспорт в GLTF/GLB с выбором формата и оптимизацией."""
+        if not self.current_scene:
+            QMessageBox.warning(self, "Внимание", "Сначала создайте модель!")
+            return
+
+        # 1. Диалог с явным выбором формата
+        filters = "GLB (всё в одном файле) (*.glb);;GLTF (JSON + внешние файлы) (*.gltf)"
+        path, _ = QFileDialog.getSaveFileName(self, "Экспорт 3D-модели", "", filters)
+        if not path:
+            return
+
+        # 2. Определяем формат по расширению (QFileDialog подставляет его автоматически)
+        file_ext = Path(path).suffix.lower()
+        file_type = file_ext.lstrip('.')  # 'glb' или 'gltf'
+
+        try:
+            self.progress_label.setText("📦 Подготовка и экспорт...")
+            QApplication.processEvents()
+
+            # 3. Работаем с копией сцены, чтобы оптимизация не изменила модель в 3D-вьюпорте
+            scene_to_export = self.current_scene.copy()
+
+            # 4. Оптимизация (если включена чекбоксом)
+            if self.chk_optimize.isChecked():
+                for name, mesh in list(scene_to_export.geometry.items()):
+                    if mesh is None or mesh.is_empty:
+                        continue
+
+                    # Упрощение геометрии для больших мешей
+                    if len(mesh.faces) > 10000 and hasattr(mesh, 'simplify_quadratic_decimation'):
+                        try:
+                            target = max(500, len(mesh.faces) // 3)
+                            scene_to_export.geometry[name] = mesh.simplify_quadratic_decimation(target)
+                        except Exception as e:
+                            logger.warning(f"⚠️ Пропущено упрощение {name}: {e}")
+
+                    # Фикс нормалей (важно для корректного освещения)
+                    if not mesh.is_watertight:
+                        try:
+                            mesh.fix_normals()
+                        except:
+                            pass
+
+            # 5. Экспорт
+            scene_to_export.export(path, file_type=file_type)
+
+            # 6. Обратная связь
+            size_mb = Path(path).stat().st_size / (1024 * 1024)
+            status = f"✅ {file_type.upper()} сохранён: {size_mb:.1f} МБ"
+            if self.chk_optimize.isChecked():
+                status += " (оптимизировано)"
+
+            self.progress_label.setText(status)
+            QMessageBox.information(
+                self, "Успех",
+                f"Файл: {Path(path).name}\nФормат: {file_type.upper()}\nРазмер: {size_mb:.1f} МБ"
+            )
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка экспорта: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить:\n{str(e)}")
 
 
 if __name__ == "__main__":

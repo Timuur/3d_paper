@@ -10,11 +10,34 @@ from trimesh.transformations import rotation_matrix, concatenate_matrices
 from shapely.geometry import Polygon
 
 import logging
+logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
 
 from check_ddor import extract_wall_segments_with_ids, find_true_opening_center
 
-# logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
-# logger = logging.getLogger(__name__)
+
+
+from trimesh.visual.material import PBRMaterial, SimpleMaterial
+import base64
+from pathlib import Path
+
+def _create_pbr_material(color=None, texture_path=None, metallic=0.1, roughness=0.8):
+    """Создание PBR-материала для экспорта в GLTF."""
+    if texture_path and Path(texture_path).exists():
+        from PIL import Image
+        image = Image.open(texture_path)
+        return PBRMaterial(
+            baseColorTexture=image,
+            metallicFactor=metallic,
+            roughnessFactor=roughness,
+            doubleSided=True
+        )
+    else:
+        return SimpleMaterial(
+            diffuse=color or [200, 200, 200],
+            ambient=color or [100, 100, 100],
+            specular=[50, 50, 50]
+        )
 
 def get_file_path(filename: str) -> Path:
     base_path = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path(__file__).parent
@@ -39,7 +62,7 @@ def clear_cache():
     except:
         pass
 
-    # Также можно очистить кэш загрузчиков
+    #очистить кэш загрузчиков
     if hasattr(trimesh.exchange, 'load') and hasattr(trimesh.exchange.load, '_mesh_loaders'):
         pass
 
@@ -81,17 +104,23 @@ def load_mesh_paths() -> dict:
 
 obj_mesh = load_mesh_paths()
 
-def _load_mesh_safe(path: Path, default_scale: float = 8.0):
+def _load_mesh_safe(path: Path, default_scale: float = 8.0, material_config=None):
     """Безопасная загрузка меша с валидацией."""
     try:
         mesh = trimesh.load(path, force='mesh')
         if mesh.is_empty:
-            # logger.error(f"❌ Пустой меш: {path}")
-            print(f"❌ Пустой меш: {path}")
+            logger.error(f"❌ Пустой меш: {path}")
+            # print(f"❌ Пустой меш: {path}")
             return None
         mesh.apply_scale(default_scale)
         mesh.fix_normals()
         # logger.info(f"✅ Загружен меш: {path.name}, вершин: {len(mesh.vertices)}")
+
+        if material_config:
+            mesh.visual = trimesh.visual.TextureVisuals(
+                material=_create_pbr_material(**material_config)
+            )
+
         print(f"✅ Загружен меш: {path.name}, вершин: {len(mesh.vertices)}")
         return mesh
     except Exception as e:
@@ -99,6 +128,12 @@ def _load_mesh_safe(path: Path, default_scale: float = 8.0):
         print(f"❌ Ошибка загрузки {path}: {e}")
         return None
 
+MATERIAL_CONFIG = {
+    'Door': {'color': [139, 69, 19], 'roughness': 0.7},      # Дерево
+    'Window': {'color': [173, 216, 230], 'metallic': 0.8},   # Стекло/металл
+    'bathtube': {'color': [255, 250, 250], 'roughness': 0.3},# Керамика
+    'cold_box': {'color': [192, 192, 192], 'metallic': 0.9}, # Металл
+}
 
 def gen_floor(objects):
 
@@ -116,7 +151,9 @@ def gen_floor(objects):
     floor.apply_transform(matrix_z_inversion)
 
     # Настраиваем внешний вид
-    floor.visual.face_colors = [150, 150, 250, 200]  # Полупрозрачный синий
+    floor.visual = trimesh.visual.TextureVisuals(
+        material=_create_pbr_material(color=[150, 150, 250], roughness=0.9)
+    )
 
     # Создаем сцену
     return floor
@@ -132,17 +169,18 @@ def build_obj(obj_contours, wall_contours, scale):
             continue
         if obj_mesh[class_o]:
             logging.info(f'Tekuschiq - {class_o}')
-            mesh_obj = _load_mesh_safe(get_file_path(obj_mesh[class_o]))
+            mesh_obj = _load_mesh_safe(get_file_path(obj_mesh[class_o]), 8, material_config=MATERIAL_CONFIG.get(class_o))
 
             for i, contour in enumerate(obj_contours[class_o]):
                 # logger.info(")()()()(try copy mesh)()()()()(")
-                # print(")()()()(try copy mesh)()()()()(")
-
                 mesh = mesh_obj.copy()
-                print(")()()()( copy pass mesh)()()()()(")
 
-                wight_d = contour[2][0] - contour[0][0]
-                hight_d = contour[1][1] - contour[0][1]
+                contour_array = np.array(contour)
+
+                width_d = contour_array[:, 0].max() - contour_array[:, 0].min()  # 1274 - 1175 = 99
+                depth_d = contour_array[:, 1].max() - contour_array[:, 1].min()  # 1618 - 1467 = 151
+
+                print(f"Габариты: {width_d} x {depth_d}")
 
                 # ppoint = contour[0]
                 # p_ch = False
@@ -168,12 +206,15 @@ def build_obj(obj_contours, wall_contours, scale):
                 # contour = np.column_stack((contour, np.zeros(len(contour))))
 
                 # Преобразуем контур в массив точек
-                contour_points = np.array(contour[0])
+                center_x = contour_array[:, 0].mean()  # Среднее по всем точкам
+                center_y = contour_array[:, 1].mean()
                 # print(contour_points)
                 # print(ppoint)
 
                 # Масштабируем координаты
-                scaled = contour_points * float(scale)
+                scaled_x = center_x * float(scale)
+                scaled_y = center_y * float(scale)
+
                 # ppoint_s = ppoint * float(scale)
                 # print(scaled)
                 # print(ppoint_s)
@@ -188,12 +229,16 @@ def build_obj(obj_contours, wall_contours, scale):
                 matrix_z_inversion = np.array([
                     [1, 0, 0, 0],
                     [0, 1, 0, 0],
-                    [0, 0, -1, 0],
-                    [0, 0, 0, 1]
+                    [0, 0, 1, 0],
+                    [0, 0, 0, -1]
                 ])
 
                 try:
-                    matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), 0  # Устанавливаем смещение
+                    min_z = mesh.bounds[0][2]
+                    if min_z < 0:
+                        matrix_z_inversion[:3, 3] = scaled_x, -(scaled_y), ((-min_z) + 0.3)
+                    else:
+                        matrix_z_inversion[:3, 3] = scaled_x, -(scaled_y), 0.3  # Устанавливаем смещение
                     # matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1] + (hight_d * float(scale))/2), 0  # Устанавливаем смещение
                     # Создаём 2D полигон
                     # mesh.apply_scale(8)
@@ -207,11 +252,13 @@ def build_obj(obj_contours, wall_contours, scale):
                     # # print(hight_win)
                     # # print(scale_win)
                     # mesh.apply_scale([scale_win, 1, 1])
-                    rot = rotation_matrix(np.pi / 2, [-1, 0, 0])
+                    rot = rotation_matrix(np.pi / 2, [1, 0, 0])
+                    # transform = concatenate_matrices(matrix_z_inversion)
                     transform = concatenate_matrices(matrix_z_inversion, rot)
                     mesh.apply_transform(transform)
-                    # # print(transform)
-                    if wight_d < hight_d:
+                    # # print(transform)w
+
+                    if width_d < depth_d:
                         # 1. Находим его центр (bounding box центроид)
                         center = mesh.bounding_box.centroid
 
@@ -245,36 +292,10 @@ def build_obj(obj_contours, wall_contours, scale):
                     continue
     return scene_objects
 
-# def check_door(wall1, wall2):
-#     box = []
-#     for i1, point1 in enumerate(wall1):
-#         x1,y1 = point1.ravel()
-#         for i2, point2 in enumerate(wall2):
-#             x2, y2 = point2.ravel()
-#             wall_length = np.linalg.norm(point1 - point2)
-#             if ((x1 == x2) or (x1 == x2 -1) or (x1 == x2+1)) and 150.0<abs(wall_length)<220.0:
-#                 # print(f"Точка {i1} =[{x1, y1}] b Точка{i2} =[{x2, y2}]: длина стены = {wall_length:.2f} м")
-#                 box.append(point1)
-#                 box.append(point2)
-#                 # print(point2)
-#                 # print(point1)
-#             else:
-#                 if ((y1 == y2) or (y1 == y2 -1) or (y1 == y2+1)) and 150.0<abs(wall_length)<220.0:
-#                     # print(f"Точка {i1} =[{x1, y1}] b Точка{i2} =[{x2, y2 }]: длина стены = {wall_length:.2f} м")
-#                     box.append(point1)
-#                     box.append(point2)
-#                     # print(point2)
-#                     # print(point1)
-#     # print("door")
-#     # print(box)
-#     return box
-
-# def build_object(obj_contours, wall_contours, scale, height = 2.7):
-
 def build_door(door_contours, wall_contours, scale, height = 2.7):
     scene_objects = []
     segments = extract_wall_segments_with_ids(wall_contours)
-    mesh_door = _load_mesh_safe(get_file_path(obj_mesh['Door']), 1)
+    mesh_door = _load_mesh_safe(get_file_path(obj_mesh['Door']), 1, material_config=MATERIAL_CONFIG.get('Door'))
     for i, contour in enumerate(door_contours):
         mesh = mesh_door.copy()
         wight_d = contour[2][0] - contour[0][0]
@@ -308,16 +329,35 @@ def build_door(door_contours, wall_contours, scale, height = 2.7):
 
         # Масштабируем координаты
         scaled = contour_points * float(scale)
-        # ppoint_s = ppoint * float(scale)
-        # print(scaled)
-        # print(ppoint_s)
-        # if wight_d > hight_d and p_ch:
-        #     scaled = scaled[0], ppoint_s[1], scaled[2]
-        # if wight_d < hight_d and p_ch:
-        #     scaled = ppoint_s[0], scaled[1], scaled[2]
-        # print(scaled)
-        # print(scaled[0])
-        # print(translation_matrix(scaled))
+
+        # Находим центр двери (в пикселях)
+        door_center_px = np.array([
+            (contour[:, 0].min() + contour[:, 0].max()) / 2,
+            (contour[:, 1].min() + contour[:, 1].max()) / 2
+        ])
+
+        # === 2. Привязка к проёму в стене ===
+        result = find_true_opening_center(door_center_px, segments, search_radius=300)
+
+        if result:
+            # Используем центр проёма, а не детектированный центр двери
+            final_center_px = np.array(result['center_px'])
+            door_angle_rad = np.radians(result['angle_deg'])
+            opening_width_px = result['opening_width_px']
+            print(f"Дверь #{i + 1}: центр проёма {final_center_px}, Ширина проёма: {opening_width_px}, угол {door_angle_rad}°")
+        else:
+            # Если проём не найден, используем центр детектированной двери
+            final_center_px = door_center_px
+            door_angle_rad = 0
+            opening_width_px = wight_d
+            print(f"Дверь #{i + 1}: проём не найден, используем детектированный центр")
+            print(f"Дверь #{i + 1}: центр проёма {final_center_px}, Ширина проёма: {opening_width_px}, угол {door_angle_rad}°")
+
+        # === 3. Масштабирование в мировые координаты ===
+        scaled_center = final_center_px * float(scale)
+        door_width_world = wight_d * float(scale)
+        door_height_world = hight_d * float(scale)
+        # print(f"Дверь #{i + 1}: центр проёма {final_center_world}, Ширина проёма: {door_width_world}, hight {door_height_world}°")
 
         matrix_z_inversion = np.array([
             [1, 0, 0, 0],
@@ -327,8 +367,8 @@ def build_door(door_contours, wall_contours, scale, height = 2.7):
         ])
 
         try:
-            matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), 0  # Устанавливаем смещение
-            # matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1] + (hight_d * float(scale))/2), 0  # Устанавливаем смещение
+            # Устанавливаем смещение
+            matrix_z_inversion[:3, 3] = scaled_center[0], -scaled_center[1], 0.3
             # Создаём 2D полигон
             mesh.apply_scale(8)
             hight_win = mesh.extents.tolist()
@@ -360,47 +400,20 @@ def build_door(door_contours, wall_contours, scale, height = 2.7):
                 # print(f"центр пов{center}")
                 mesh.apply_translation(center)
 
-            # Находим центр двери (в пикселях)
-            door_center_px = np.array([
-                (contour[:, 0].min() + contour[:, 0].max()) / 2,
-                (contour[:, 1].min() + contour[:, 1].max()) / 2
-            ])
 
-            # === 2. Привязка к проёму в стене ===
-            result = find_true_opening_center(door_center_px, segments, search_radius=300)
-
-            if result:
-                # Используем центр проёма, а не детектированный центр двери
-                final_center_px = np.array(result['center_px'])
-                door_angle_rad = np.radians(result['angle_deg'])
-                opening_width_px = result['opening_width_px']
-                # print(f"Дверь #{i + 1}: центр проёма {final_center_px}, Ширина проёма: {opening_width_px}, угол {door_angle_rad}°")
-            else:
-                # Если проём не найден, используем центр детектированной двери
-                final_center_px = door_center_px
-                door_angle_rad = 0
-                opening_width_px = wight_d
-                # print(f"Дверь #{i + 1}: проём не найден, используем детектированный центр")
-                # print(f"Дверь #{i + 1}: центр проёма {final_center_px}, Ширина проёма: {opening_width_px}, угол {door_angle_rad}°")
-
-            # === 3. Масштабирование в мировые координаты ===
-            final_center_world = final_center_px * float(scale)
-            door_width_world = wight_d * float(scale)
-            door_height_world = hight_d * float(scale)
-            # print(f"Дверь #{i + 1}: центр проёма {final_center_world}, Ширина проёма: {door_width_world}, hight {door_height_world}°")
 
 
             hight_door = mesh.extents.tolist()
             # print(hight_door)
-            h_d_p = float(height) - hight_door[2]
-            box = trimesh.primitives.Box(extents=[hight_door[0], hight_door[1], h_d_p])
-            matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), float(height) - h_d_p/2 # Устанавливаем смещение
-
-            box.apply_transform(matrix_z_inversion)
+            h_d_p = max(0.0, float(height) - hight_door[2])
+            if h_d_p > 1e-3:  # Создавать бокс только если есть зазор
+                box = trimesh.primitives.Box(extents=[hight_door[0], hight_door[1], h_d_p])
+                matrix_z_inversion[:3, 3] = scaled[0], -(scaled[1]), float(height) - h_d_p/2 # Устанавливаем смещение
+                box.apply_transform(matrix_z_inversion)
+                scene_objects.append(box)
 
             # Добавляем в сцену
             scene_objects.append(mesh)
-            scene_objects.append(box)
 
             print(f"Контур DOOR #{i + 1} успешно преобразован в 3D-объект")
 
@@ -411,7 +424,7 @@ def build_door(door_contours, wall_contours, scale, height = 2.7):
 
 def build_window(window_position, wall_contours, scale, height = 2.7):
     scene_objects = []
-    mesh_window = _load_mesh_safe(get_file_path(obj_mesh['Window']), 1)
+    mesh_window = _load_mesh_safe(get_file_path(obj_mesh['Window']), 1, material_config=MATERIAL_CONFIG.get('Window'))
     for i, contour in enumerate(window_position):
         win_mesh = mesh_window.copy()
         wight_d = contour[2][0] - contour[0][0]
@@ -510,66 +523,6 @@ def build_window(window_position, wall_contours, scale, height = 2.7):
     return scene_objects
 
 
-
-# import numpy as np
-# import trimesh
-# from trimesh.transformations import rotation_matrix, translation_matrix, concatenate_matrices
-#
-
-#
-# def build_opening(contours, base_mesh, scale: float, height: float = 2.7, is_door: bool = True, min_h: float = 0.9):
-#     # float = 0.9
-#     scene_objects = []
-#     for i, contour in enumerate(contours):
-#         try:
-#             # 1. Подготовка контура
-#             # pts = np.array(i2w.average_close_points(contour, 300))
-#             width = abs(contour[2, 0] - contour[0, 0])
-#             height_obj = abs(contour[1, 1] - contour[0, 1])
-#
-#             # 2. Базовая позиция (центр проёма)
-#             center_2d = contour.mean(axis=0)
-#             pos = [center_2d[0] * scale, -center_2d[1] * scale, 0.0]
-#
-#             # 3. Композиция трансформаций
-#             T = translation_matrix(pos)
-#             rot = rotation_matrix(np.pi / 2, [-1, 0, 0])
-#             T = concatenate_matrices(T, rot)
-#
-#             if width < height_obj:
-#                 rot_z = rotation_matrix(np.pi / 2, [0, 0, 1])
-#                 T = concatenate_matrices(T, rot_z)
-#
-#             # 4. Масштабирование
-#             mesh = base_mesh.copy()
-#             extents = mesh.extents  # вычисляется 1 раз
-#             scale_factor = (width * scale) / extents[0] if is_door else (height_obj * scale) / extents[2]
-#             S = np.diag([scale_factor, 1.0, 1.0] if is_door else [1.0, 1.0, scale_factor])
-#             T[:3, :3] = T[:3, :3] @ S
-#
-#             mesh.apply_transform(T)
-#
-#             # 5. Заполнители (стена над/под проёмом)
-#             if is_door:
-#                 h_clear = height - mesh.extents[2]
-#                 filler = trimesh.primitives.Box(extents=[mesh.extents[0], mesh.extents[1], h_clear])
-#                 filler.apply_transform(translation_matrix([pos[0], pos[1], height - h_clear / 2]))
-#                 scene_objects.extend([mesh, filler])
-#             else:
-#                 logging.debug(f"Проем #{mesh.extents}")
-#                 h_clear = height - (mesh.extents[2] + min_h)
-#                 logging.debug(f"h_clear #{h_clear}")
-#                 filler1 = trimesh.primitives.Box(extents=[mesh.extents[0], mesh.extents[1], h_clear])
-#                 filler2 = trimesh.primitives.Box(extents=[mesh.extents[0], mesh.extents[1], h_clear])
-#                 filler1.apply_transform(translation_matrix([pos[0], pos[1], height - h_clear / 2]))
-#                 filler2.apply_transform(translation_matrix([pos[0], pos[1], height - h_clear / 2]))
-#                 scene_objects.extend([mesh, filler1, filler2])
-#
-#             logging.info(f"Проем #{i + 1} построен успешно")
-#         except Exception as e:
-#             logging.error(f"Ошибка в проеме #{i + 1}: {e}")
-#             continue
-#     return scene_objects
 
 def build_3d_model(wall_contours, scale=0.1, height=3.0):
     """

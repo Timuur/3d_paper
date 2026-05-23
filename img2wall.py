@@ -2,8 +2,6 @@ import cv2
 import numpy as np
 from random import randrange
 
-from matplotlib import pyplot as plt
-
 from check_img_ai_v2 import get_coord
 
 classes_dict = {'Door': [],
@@ -283,18 +281,18 @@ def clear_cache():
         classes_dict[key] = []
 
     # 2. Безопасная очистка кэша нейросети
-    try:
-        from check_img_ai_v2 import clear_cache as cache_clear_ii
-        cache_clear_ii()
-    except:
-        pass
+    # try:
+    #     from check_img_ai_v2 import clear_cache as cache_clear_ii
+    #     cache_clear_ii()
+    # except:
+    #     pass
 
-    # 3. Сброс окон OpenCV (если были открыты)
-    try:
-        import cv2
-        cv2.destroyAllWindows()
-    except:
-        pass
+    # # 3. Сброс окон OpenCV (если были открыты)
+    # try:
+    #     import cv2
+    #     cv2.destroyAllWindows()
+    # except:
+    #     pass
 
 def replace_gray_in_monochrome(image, lower_gray=39, upper_gray=255, target_value=255):
     """
@@ -310,49 +308,12 @@ def replace_gray_in_monochrome(image, lower_gray=39, upper_gray=255, target_valu
     image[mask] = target_value
     return image
 
-def get_scale(classes_dict, original_image, pixel_on_map=151):
-    #1 получить координаты дверей
-    #2 зная примерно идеальную длину двери высчитать необходимый масштаб
-    #3 применить масштаб
-    for i, contour in enumerate(classes_dict['Door']):
-        wight_d_i = contour[2][0] - contour[0][0]
-        hight_d_i = contour[1][1] - contour[0][1]
-        if wight_d_i > hight_d_i:
-            # scale_win = wight_d_i * float(scale) / hight_win[0]
-            scale_p = pixel_on_map / wight_d_i
-            # print('(', scale_p,")hight_d = ", pixel_on_map, ' / ', wight_d_i,'/', wight_d_i*0.05)
-        else:
-            # scale_win = hight_d_i * float(scale) / hight_win[0]
-            scale_p =  pixel_on_map / hight_d_i
-            # print('(', scale_p,")hight_d = ", pixel_on_map, '/', hight_d_i,'/', hight_d_i*0.05)
-    # for i, contour in enumerate(classes_dict['door_bath']):
-    #     wight_d_i = contour[2][0] - contour[0][0]
-    #     hight_d_i = contour[1][1] - contour[0][1]
-    #     if wight_d_i > hight_d_i:
-    #         # scale_win = wight_d_i * float(scale) / hight_win[0]
-    #         scale_p = pixel_on_map / wight_d_i
-    #         print('(', scale_p,")hight_d = ", pixel_on_map, '/', wight_d_i)
-    #     else:
-    #         # scale_win = hight_d_i * float(scale) / hight_win[0]
-    #         scale_p =  pixel_on_map / hight_d_i
-    #         print('(', scale_p,")hight_d = ", pixel_on_map, '/', hight_d_i)
-    # for i, contour in enumerate(classes_dict['door_bath_l']):
-    #     wight_d_i = contour[2][0] - contour[0][0]
-    #     hight_d_i = contour[1][1] - contour[0][1]
-    #     if wight_d_i > hight_d_i:
-    #         # scale_win = wight_d_i * float(scale) / hight_win[0]
-    #         scale_p = pixel_on_map / wight_d_i
-    #         print('(', scale_p,")hight_d = ", pixel_on_map, '/', wight_d_i)
-    #     else:
-    #         # scale_win = hight_d_i * float(scale) / hight_win[0]
-    #         scale_p =  pixel_on_map / hight_d_i
-    #         print('(', scale_p,")hight_d = ", pixel_on_map, '/', hight_d_i)
-
-def process_floor_plan(image_path, border_size=20):
+def process_floor_plan(image_path, border_size=20, merge_objects=True, axis_tol=5.0, thick_tol=5.0, gap_tol=250.0):
     """
     Основная функция обработки плана помещения
     :param image_path: Путь к исходному изображению
     :param border_size: Размер обрамляющей рамки
+    :param merge_objects: Если True — объединять коллинеарные прямоугольники (по умолчанию True)
     :return: Контуры стен и исходные размеры изображения
     """
     # _________________________________________________________________________________________
@@ -371,7 +332,6 @@ def process_floor_plan(image_path, border_size=20):
 
     # class_path_txt = get_file_path('ai_model/classes.txt')
 
-
     detections, labels = get_coord(image_path)
     # print(detections)
     print(labels)
@@ -385,22 +345,17 @@ def process_floor_plan(image_path, border_size=20):
         xy2 = xmin + border_size, ymax + border_size
         xy4 = xmax + border_size, ymin + border_size
         xy3 = xmax + border_size, ymax + border_size
-        xyy = xy1,xy2,xy3,xy4
+        xyy = xy1, xy2, xy3, xy4
 
         # Get bounding box class ID and name
         classidx = int(detections[i].cls.item())
         classname = labels[classidx]
 
-        # Get bounding box confidence
-        # conf = detections[i].conf.item()
-
         if classname in classes_dict:
             classes_dict[classname].append(np.array(xyy))
 
-    get_scale(classes_dict,original_image)
     # _________________________________________________________________________________________
     # _________________________________________________________________________________________
-
 
     # Замена черного фона на белый
     # black_pixels_mask = np.all(original_image[:, :, :3] == [0, 0, 0], axis=-1)
@@ -437,20 +392,6 @@ def process_floor_plan(image_path, border_size=20):
     border_margin = -10
     image_height, image_width = processed_image.shape
 
-
-
-    # print(f"\nКонтур #no abs:")
-    # print(contours)
-    # print("________________________________________________________________________")
-
-
-    # print(f"\nКонтур #abs:")
-    # print(contours)
-    # print("________________________________________________________________________")
-
-
-    # debug_box = [window,box,door,toilet]
-
     # Создаем словарь для хранения отфильтрованных контуров
     filtered_contours1 = {}
 
@@ -473,9 +414,6 @@ def process_floor_plan(image_path, border_size=20):
                     # Добавляем в отфильтрованный список
                     filtered_contours1[category].append(contour)
 
-                    # Рисуем контур (особая толщина для toilet)
-                    # thickness = 2
-                    # cv2.drawContours(bordered_image, [contour], 0, color1, thickness)
         else:
             # Если контуров нет, создаем пустой список для этой категории
             filtered_contours1[category] = []
@@ -485,64 +423,41 @@ def process_floor_plan(image_path, border_size=20):
 
     for i, contour in enumerate(contours_wall):
         print(contour)
-        contour = np.array( average_close_points(   contour.reshape(-1, 2), 3))
+        contour = np.array(average_close_points(contour.reshape(-1, 2), 3))
         x, y, w, h = cv2.boundingRect(contour)
         if (x > border_size + border_margin
                 and y > border_size + border_margin
                 and (x + w) < (image_width - border_size - border_margin)
                 and (y + h) < (image_height - border_size - border_margin)):
             filtered_contours_wall.append(contour)
-            # cv2.drawContours(bordered_image, [contour], 0, (randrange(50,256), randrange(50, 256), randrange(50, 256)), 1)
-        # contour_points = contour.reshape(-1, 2)
 
-    #     # Вывод таблицы для каждого контура
-    #     print(f"\nКонтур #{i + 1}:")
-    #     print(tabulate(
-    #         contour_points,
-    #         headers=['X', 'Y'],
-    #         tablefmt="grid",
-    #         showindex="always"
-    #     ))
-    # # print("________________________________________________________________________")
-    # #
+    if merge_objects:
+        print("\n🔄 Запуск пайплайна объединения объектов...")
+        filtered_contours1 = merge_rects_pipeline(
+            filtered_contours1,
+            axis_tol=axis_tol,# Допуск смещения оси (пиксели)
+            thick_tol=thick_tol,# Допуск разницы толщины
+            gap_tol=gap_tol,# Максимальный разрыв для объединения
+            verbose=True
+        )
+        print("✅ Объединение завершено")
+        print("\n🔄 Запуск пайплайна объединения СТЕН...")
+        filtered_contours_wall = merge_wall_contours(
+            filtered_contours_wall,
+            axis_tol=axis_tol,
+            thick_tol=thick_tol,
+            gap_tol=gap_tol,
+            verbose=True
+        )
+        print("✅ Объединение стен завершено")
+
+    print(f"\nКонтур #wall:")
+    print(filtered_contours_wall)
+    print("________________________________________________________________________")
+
     print(f"\nКонтур #abs:")
     print(filtered_contours1)
-    # print("________________________________________________________________________")
-    # print("________________________________________________________________________")
-
-    # _________________________________________________________________________________________
-    # Визуализация промежуточных результатов
-    debug_images = [
-        original_image,
-        bordered_image,
-        gray_image,
-        binary_image,
-        cleaned_image,
-        processed_image
-    ]
-    # Конвертация BGR в RGB для корректного отображения
-    # debug_images_rgb = [cv2.cvtColor(img, cv2.COLOR_BGR2RGB) if len(img.shape) == 3 else img
-    #                     for img in debug_images]
-    #
-    # titles = [
-    #     'Original Image',
-    #     'Bordered Image',
-    #     'Grayscale',
-    #     'Binary Image',
-    #     'Cleaned Image',
-    #     'processed Image'
-    # ]
-    #
-    # plt.figure(figsize=(15, 10))
-    # for i, (img, title) in enumerate(zip(debug_images_rgb, titles)):
-    #     plt.subplot(2, 3, i + 1)
-    #     plt.imshow(img, cmap='gray' if i > 1 else None)
-    #     plt.title(title)
-    #     plt.axis('off')
-    # plt.tight_layout()
-    # plt.show()
-    # # _________________________________________________________________________________________
-    # cv2.imwrite('output.png', cleaned_image)
+    print("________________________________________________________________________")
 
     if not filtered_contours_wall:
         raise ValueError("Не обнаружено стен. Проверьте параметры обработки изображения.")
@@ -556,126 +471,230 @@ def process_floor_plan(image_path, border_size=20):
     # return sorted_corner, (original_height, original_width)
     return wall_contours, (original_height, original_width), filtered_contours1
 
+import numpy as np
+from shapely.geometry import Polygon, Point
+from shapely.ops import unary_union
+from collections import defaultdict
 
-def process_floor_plan_with_scaling(image_path, border_size=20, target_cm_per_pixel=0.5):
+
+def decompose_orthogonal_polygon(coords):
     """
-    Обработка плана с автоматическим масштабированием изображения.
-
-    Args:
-        image_path: Путь к изображению
-        border_size: Размер рамки
-        target_cm_per_pixel: Целевой масштаб (см/пиксель)
-
-    Returns:
-        wall_contours, original_size, obj_contours, cm_per_pixel
-        (БЕЗ scaled_image - оно уже возвращено через calculate_and_resize_image)
+    1. РАЗБИВКА: Преобразует сложный ортогональный полигон в набор простых прямоугольников.
+    Использует метод сетки по уникальным координатам вершин.
     """
-    global classes_dict
+    # Конвертируем в numpy array если нужно
+    if not isinstance(coords, np.ndarray):
+        coords = np.array(coords)
 
-    # 1. Сначала масштабируем изображение
-    print("=" * 60)
-    print("📐 ЭТАП 1: МАСШТАБИРОВАНИЕ ИЗОБРАЖЕНИЯ")
-    print("=" * 60)
+    # Убираем лишние измерения если есть
+    if coords.ndim == 3 and coords.shape[1] == 1:
+        coords = coords.squeeze(1)
 
-    resize_result = calculate_and_resize_image(
-        image_path,
-        output_path=None,  # Можно указать 'scaled_plan.png'
-        target_bath_door_cm=90,
-        target_regular_door_cm=100
-    )
+    poly = Polygon(coords)
+    if not poly.is_valid or poly.is_empty:
+        return []
 
-    scaled_image = resize_result['scaled_image']
-    cm_per_pixel = resize_result['cm_per_pixel']
+    xs = sorted(set(coords[:, 0]))
+    ys = sorted(set(coords[:, 1]))
 
-    # 2. Временное сохранение для обработки
-    import tempfile
-    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-        temp_path = tmp.name
-        cv2.imwrite(temp_path, scaled_image)
+    rects = []
+    for i in range(len(xs) - 1):
+        for j in range(len(ys) - 1):
+            cx = (xs[i] + xs[i + 1]) / 2
+            cy = (ys[j] + ys[j + 1]) / 2
+            # Если центр ячейки внутри исходного полигона -> сохраняем прямоугольник
+            if poly.contains(Point(cx, cy)):
+                rects.append(np.array([
+                    [xs[i], ys[j]], [xs[i + 1], ys[j]],
+                    [xs[i + 1], ys[j + 1]], [xs[i], ys[j + 1]]
+                ]))
+    return rects
 
-    try:
-        # 3. Обрабатываем масштабированное изображение
-        print("\n" + "=" * 60)
-        print("📐 ЭТАП 2: ОБРАБОТКА МАСШТАБИРОВАННОГО ПЛАНА")
-        print("=" * 60)
 
-        # Очищаем кэш
-        classes_dict = {key: [] for key in classes_dict}
+def merge_rects_pipeline(plan_data, axis_tol=5.0, thick_tol=5.0, gap_tol=250.0, verbose=False):
+    """
+    Полный пайплайн: Декомпозиция -> Группировка -> Объединение -> Возврат координат
+    Возвращает данные в том же формате: dict[str, list[np.array]]
+    """
+    final_plan = {}
+    stats = {}
 
-        # Детектируем объекты на масштабированном изображении
-        from check_img_ai_v2 import get_coord
+    for category, polygons in plan_data.items():
+        if not polygons:
+            final_plan[category] = []
+            continue
 
-        detections, labels = get_coord(temp_path)
+        # 1️⃣ РАЗБИВКА
+        decomposed = []
+        for poly_coords in polygons:
+            # Обрабатываем разные форматы входных данных
+            if isinstance(poly_coords, (list, tuple)) and len(poly_coords) > 0:
+                if isinstance(poly_coords[0], (list, tuple)):
+                    coords = np.array(poly_coords)
+                else:
+                    coords = np.array([p.ravel() if hasattr(p, 'ravel') else p for p in poly_coords])
+            elif isinstance(poly_coords, np.ndarray):
+                coords = poly_coords.squeeze() if poly_coords.ndim == 3 else poly_coords
+            else:
+                continue
 
-        for i in range(len(detections)):
-            xyxy_tensor = detections[i].xyxy.cpu()
-            xyxy = xyxy_tensor.numpy().squeeze()
-            xmin, ymin, xmax, ymax = xyxy.astype(int)
+            decomposed.extend(decompose_orthogonal_polygon(coords))
 
-            # Добавляем border_size
-            xy1 = (xmin + border_size, ymin + border_size)
-            xy2 = (xmin + border_size, ymax + border_size)
-            xy3 = (xmax + border_size, ymax + border_size)
-            xy4 = (xmax + border_size, ymin + border_size)
+        if not decomposed:
+            final_plan[category] = []
+            continue
 
-            classidx = int(detections[i].cls.item())
-            classname = labels[classidx]
+        # 2️⃣ ИЗВЛЕЧЕНИЕ СВОЙСТВ
+        props = []
+        for rect in decomposed:
+            p = Polygon(rect)
+            if not p.is_valid: continue
+            minx, miny, maxx, maxy = p.bounds
+            w, h = maxx - minx, maxy - miny
 
-            if classname in classes_dict:
-                contour = np.array([xy1, xy2, xy3, xy4])
-                classes_dict[classname].append(contour)
+            if w >= h:  # Горизонтальный
+                props.append({'poly': p, 'orient': 'H', 'thick': h,
+                              'axis': (miny + maxy) / 2, 'start': minx, 'end': maxx})
+            else:  # Вертикальный
+                props.append({'poly': p, 'orient': 'V', 'thick': w,
+                              'axis': (minx + maxx) / 2, 'start': miny, 'end': maxy})
 
-        # 4. Обрабатываем стены (как раньше)
-        original_height, original_width = scaled_image.shape[:2]
-        bordered_image = add_white_border(scaled_image, border_size)
+        # 3️⃣ ГРУППИРОВКА (по ориентации, толщине, оси с учётом допусков)
+        groups = defaultdict(list)
+        for p in props:
+            key = (
+                p['orient'],
+                round(p['thick'] / thick_tol) * thick_tol,
+                round(p['axis'] / axis_tol) * axis_tol
+            )
+            groups[key].append(p)
 
-        gray_image = cv2.cvtColor(bordered_image, cv2.COLOR_BGR2GRAY)
-        processed_image = apply_adaptive_threshold(gray_image)
+        # 4️⃣ ОБЪЕДИНЕНИЕ (линейный проход с проверкой зазора)
+        merged_rects = []
+        merged_count = 0
+        for key, items in groups.items():
+            items.sort(key=lambda x: x['start'])
+            if not items: continue
 
-        # Морфология и очистка
-        kernel = np.ones((5, 5), np.uint8)
-        cleaned_image = cv2.morphologyEx(processed_image, cv2.MORPH_CLOSE, kernel, iterations=1)
+            curr = items[0]
+            for nxt in items[1:]:
+                # Проверка разрыва <= gap_tol
+                if nxt['start'] <= curr['end'] + gap_tol:
+                    curr['end'] = max(curr['end'], nxt['end'])
+                    curr['poly'] = unary_union([curr['poly'], nxt['poly']])
+                    merged_count += 1
+                else:
+                    mb = curr['poly'].bounds
+                    merged_rects.append(np.array([
+                        [mb[0], mb[1]], [mb[2], mb[1]],
+                        [mb[2], mb[3]], [mb[0], mb[3]]
+                    ]))
+                    curr = nxt
 
-        # Поиск контуров стен
-        contours_wall, _ = cv2.findContours(cleaned_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            mb = curr['poly'].bounds
+            merged_rects.append(np.array([
+                [mb[0], mb[1]], [mb[2], mb[1]],
+                [mb[2], mb[3]], [mb[0], mb[3]]
+            ]))
 
-        # Фильтрация
-        filtered_contours_wall = []
-        border_margin = 10
-        image_height, image_width = cleaned_image.shape
+        final_plan[category] = merged_rects
+        stats[category] = {
+            'before': len(polygons),
+            'decomposed': len(decomposed),
+            'after': len(merged_rects),
+            'unions_performed': merged_count
+        }
 
-        for contour in contours_wall:
-            contour = contour.reshape(-1, 2)
-            x, y, w, h = cv2.boundingRect(contour)
+    if verbose:
+        print("\n📊 СТАТИСТИКА ОБЪЕДИНЕНИЯ ОБЪЕКТОВ")
+        print(f"{'Категория':<15} | {'Исходных':<8} | {'Разбито на':<10} | {'Итого':<8} | Объед.")
+        print("-" * 65)
+        for cat, s in stats.items():
+            if s['before'] > 0:  # Показываем только категории с данными
+                print(
+                    f"{cat:<15} | {s['before']:<8} | {s['decomposed']:<10} | {s['after']:<8} | {s['unions_performed']}")
 
-            if (x > border_size + border_margin and
-                    y > border_size + border_margin and
-                    (x + w) < (image_width - border_size - border_margin) and
-                    (y + h) < (image_height - border_size - border_margin)):
-                filtered_contours_wall.append(contour)
+    return final_plan
 
-        # Усреднение точек
-        filtered_contours_wall = average_close2points(filtered_contours_wall, 4)
 
-        # Корректировка координат (убираем border_size)
-        wall_contours = [cnt - border_size for cnt in filtered_contours_wall]
+def merge_wall_contours(wall_contours, axis_tol=5.0, thick_tol=5.0, gap_tol=250.0, verbose=False):
+    """
+    Обрабатывает список сложных контуров стен:
+    1. Декомпозиция на простые прямоугольники
+    2. Группировка по ориентации/толщине/оси
+    3. Объединение коллинеарных сегментов с учётом зазора
+    4. Возврат в формате List[np.array] (совместимо с исходным кодом)
+    """
+    if not wall_contours:
+        return []
 
-        # Корректируем координаты объектов
-        for key in classes_dict:
-            classes_dict[key] = [cnt - border_size for cnt in classes_dict[key]]
+    # 1️⃣ РАЗБИВКА всех сложных контуров на простые прямоугольники
+    decomposed = []
+    for contour in wall_contours:
+        # Нормализуем входные данные
+        if isinstance(contour, np.ndarray):
+            coords = contour.squeeze() if contour.ndim == 3 else contour
+        else:
+            coords = np.array(contour)
+        decomposed.extend(decompose_orthogonal_polygon(coords))
 
-        print(f"\n✅ Обработка завершена!")
-        print(f"   Найдено стен: {len(wall_contours)}")
-        print(f"   Найдено объектов: {sum(len(v) for v in classes_dict.values())}")
-        print(f"   Масштаб: 1 px = {cm_per_pixel:.4f} см")
+    if not decomposed:
+        return wall_contours  # Возвращаем как есть, если не удалось разбить
 
-        # ВОЗВРАЩАЕМ 4 ЗНАЧЕНИЯ (без scaled_image)
-        return wall_contours, (original_height, original_width), classes_dict, cm_per_pixel
+    # 2️⃣ ИЗВЛЕЧЕНИЕ СВОЙСТВ
+    props = []
+    for rect in decomposed:
+        p = Polygon(rect)
+        if not p.is_valid: continue
+        minx, miny, maxx, maxy = p.bounds
+        w, h = maxx - minx, maxy - miny
 
-    finally:
-        # Удаляем временный файл
-        import os
-        try:
-            os.unlink(temp_path)
-        except:
-            pass
+        if w >= h:  # Горизонтальный
+            props.append({'poly': p, 'orient': 'H', 'thick': h,
+                          'axis': (miny + maxy) / 2, 'start': minx, 'end': maxx})
+        else:  # Вертикальный
+            props.append({'poly': p, 'orient': 'V', 'thick': w,
+                          'axis': (minx + maxx) / 2, 'start': miny, 'end': maxy})
+
+    # 3️⃣ ГРУППИРОВКА
+    groups = defaultdict(list)
+    for p in props:
+        key = (
+            p['orient'],
+            round(p['thick'] / thick_tol) * thick_tol,
+            round(p['axis'] / axis_tol) * axis_tol
+        )
+        groups[key].append(p)
+
+    # 4️⃣ ОБЪЕДИНЕНИЕ
+    merged_rects = []
+    merged_count = 0
+    for key, items in groups.items():
+        items.sort(key=lambda x: x['start'])
+        if not items: continue
+
+        curr = items[0]
+        for nxt in items[1:]:
+            if nxt['start'] <= curr['end'] + gap_tol:
+                curr['end'] = max(curr['end'], nxt['end'])
+                curr['poly'] = unary_union([curr['poly'], nxt['poly']])
+                merged_count += 1
+            else:
+                mb = curr['poly'].bounds
+                merged_rects.append(np.array([
+                    [mb[0], mb[1]], [mb[2], mb[1]],
+                    [mb[2], mb[3]], [mb[0], mb[3]]
+                ]))
+                curr = nxt
+
+        mb = curr['poly'].bounds
+        merged_rects.append(np.array([
+            [mb[0], mb[1]], [mb[2], mb[1]],
+            [mb[2], mb[3]], [mb[0], mb[3]]
+        ]))
+
+    if verbose and merged_count > 0:
+        print(
+            f"🧱 Стены: {len(wall_contours)} сложных → {len(decomposed)} простых → {len(merged_rects)} объединённых (+{merged_count} слияний)")
+
+    return merged_rects
