@@ -46,7 +46,10 @@ def calculate_and_resize_image(image_path, output_path=None, target_bath_door_cm
             'cm_per_pixel': масштаб (см/пиксель) после масштабирования
         }
     """
-    # 1. Загружаем изображение и детектируем объекты
+    import os
+    import tempfile
+
+    # 1. Загружаем изображение
     original_image = cv2.imread(image_path)
     if original_image is None:
         raise ValueError(f"Не удалось загрузить изображение: {image_path}")
@@ -54,87 +57,105 @@ def calculate_and_resize_image(image_path, output_path=None, target_bath_door_cm
     original_height, original_width = original_image.shape[:2]
     print(f"\n📐 Исходный размер изображения: {original_width}×{original_height} px")
 
-    # 2. Получаем координаты дверей (предполагаем, что get_coord уже настроен)
-    from check_img_ai_v2 import get_coord
+    # 2. Функция для поиска и сбора размеров дверей
+    def extract_door_sizes(img_path):
+        from check_img_ai_v2 import get_coord
+        detections, labels = get_coord(img_path)
+        bath_doors, regular_doors = [], []
 
-    # Временная обработка для получения дверей
-    detections, labels = get_coord(image_path)
+        for i in range(len(detections)):
+            xyxy = detections[i].xyxy.cpu().numpy().squeeze()
+            xmin, ymin, xmax, ymax = xyxy.astype(int)
+            classidx = int(detections[i].cls.item())
+            classname = labels[classidx]
+            door_size_px = max(xmax - xmin, ymax - ymin)
 
-    door_bath_pixels = []
-    door_regular_pixels = []
+            # Фильтр по разумному размеру двери в пикселях
+            if classname in ['door_bath', 'Door'] and 50 < door_size_px < 300:
+                if classname == 'door_bath':
+                    bath_doors.append(door_size_px)
+                    print(f"   🚪 Дверь в ванную: {door_size_px} px")
+                else:
+                    regular_doors.append(door_size_px)
+                    print(f"   🚪 Обычная дверь: {door_size_px} px")
+        return bath_doors, regular_doors
 
-    for i in range(len(detections)):
-        xyxy_tensor = detections[i].xyxy.cpu()
-        xyxy = xyxy_tensor.numpy().squeeze()
-        xmin, ymin, xmax, ymax = xyxy.astype(int)
+    # 3. Первый проход: ищем двери на исходном изображении
+    door_bath_pixels, door_regular_pixels = extract_door_sizes(image_path)
+    current_cm_per_pixel = None
 
-        classidx = int(detections[i].cls.item())
-        classname = labels[classidx]
-
-        width_px = xmax - xmin
-        height_px = ymax - ymin
-        door_size_px = max(width_px, height_px)  # Большая сторона - это ширина двери
-
-        # Классифицируем двери
-        if classname in ['door_bath', 'Door'] and 50 < door_size_px < 300:
-            if classname == 'door_bath':
-                door_bath_pixels.append(door_size_px)
-                print(f"   🚪 Дверь в ванную: {door_size_px} px")
-            else:
-                door_regular_pixels.append(door_size_px)
-                print(f"   🚪 Обычная дверь: {door_size_px} px")
-
-    # 3. Вычисляем целевой масштаб
+    # 4. Вычисляем масштаб по найденным дверям (приоритет: ванная → обычная)
     if door_bath_pixels:
-        # Приоритет: дверь в ванную
-        avg_bath_door_px = np.median(door_bath_pixels)
-        current_cm_per_pixel = target_bath_door_cm / avg_bath_door_px
-
-        print(f"\n📏 Масштаб определен по двери в ванную:")
-        print(f"   Средняя ширина: {avg_bath_door_px:.1f} px")
-        print(f"   Целевой размер: {target_bath_door_cm} см")
+        avg_px = np.median(door_bath_pixels)
+        current_cm_per_pixel = target_bath_door_cm / avg_px
+        print(f"\n📏 Масштаб по двери в ванную: {avg_px:.1f} px = {target_bath_door_cm} см")
         print(f"   Текущий масштаб: 1 px = {current_cm_per_pixel:.4f} см")
-
     elif door_regular_pixels:
-        # Если нет двери в ванную - используем обычные двери
-        avg_regular_door_px = np.median(door_regular_pixels)
-        current_cm_per_pixel = target_regular_door_cm / avg_regular_door_px
-
-        print(f"\n📏 Масштаб определен по обычной двери:")
-        print(f"   Средняя ширина: {avg_regular_door_px:.1f} px")
-        print(f"   Целевой размер: {target_regular_door_cm} см")
+        avg_px = np.median(door_regular_pixels)
+        current_cm_per_pixel = target_regular_door_cm / avg_px
+        print(f"\n📏 Масштаб по обычной двери: {avg_px:.1f} px = {target_regular_door_cm} см")
         print(f"   Текущий масштаб: 1 px = {current_cm_per_pixel:.4f} см")
-    else:
-        print("⚠️ Двери не найдены! Используется масштаб по умолчанию")
-        current_cm_per_pixel = 0.1  # Дефолтный масштаб
 
-    # 4. Вычисляем желаемый масштаб
-    # Целевой масштаб: например, 1 пиксель = 0.5 см (или другой удобный)
-    # target_cm_per_pixel = 0.5  # Можно настроить
+    # 5. 🔧 Если двери не найдены — масштабируем план до 1500px по большей стороне и ищем снова
+    if current_cm_per_pixel is None:
+        print("⚠️ Двери не найдены! Пропорционально масштабируем план до 1500px по большей стороне...")
+        max_side = max(original_width, original_height)
+        if max_side > 0:
+            # Промежуточное масштабирование для поиска дверей
+            temp_scale = 1500.0 / max_side
+            temp_width = int(original_width * temp_scale)
+            temp_height = int(original_height * temp_scale)
+            temp_image = cv2.resize(original_image, (temp_width, temp_height),
+                                    interpolation=cv2.INTER_AREA if temp_scale < 1 else cv2.INTER_LANCZOS4)
 
-    # Коэффициент масштабирования изображения
+            # Сохраняем во временный файл для анализа нейросетью
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                temp_path = tmp.name
+            cv2.imwrite(temp_path, temp_image)
+
+            # Повторный поиск дверей
+            door_bath_pixels, door_regular_pixels = extract_door_sizes(temp_path)
+
+            # Очищаем временный файл
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+            # Пересчитываем масштаб, если двери найдены после ресайза
+            if door_bath_pixels:
+                avg_px = np.median(door_bath_pixels)
+                # Масштаб относительно исходного изображения
+                current_cm_per_pixel = (target_bath_door_cm / avg_px) * temp_scale
+                print(f"✅ После ресайза найдена дверь в ванную: {avg_px:.1f} px")
+            elif door_regular_pixels:
+                avg_px = np.median(door_regular_pixels)
+                current_cm_per_pixel = (target_regular_door_cm / avg_px) * temp_scale
+                print(f"✅ После ресайза найдена обычная дверь: {avg_px:.1f} px")
+
+    # 6. Фоллбэк: если дверей так и нет — используем дефолтный масштаб
+    if current_cm_per_pixel is None:
+        current_cm_per_pixel = 0.1  # 1px = 0.1 см по умолчанию
+        print("⚠️ Двери так и не найдены, используем масштаб по умолчанию: 1px = 0.1 см")
+
+    # 7. Вычисляем итоговый коэффициент масштабирования к целевому масштабу
     scale_factor = current_cm_per_pixel / target_cm_per_pixel
-
-    print(f"\n🔄 Масштабирование:")
+    print(f"\n🔄 Финальное масштабирование:")
     print(f"   Текущий масштаб: 1 px = {current_cm_per_pixel:.4f} см")
     print(f"   Целевой масштаб: 1 px = {target_cm_per_pixel:.4f} см")
     print(f"   Коэффициент: {scale_factor:.4f}")
 
-    # 5. Вычисляем новые размеры
+    # 8. Вычисляем новые размеры
     new_width = int(original_width * scale_factor)
     new_height = int(original_height * scale_factor)
+    print(f"\n📐 Итоговые размеры: {original_width}×{original_height} → {new_width}×{new_height} px")
 
-    print(f"\n📐 Новые размеры:")
-    print(f"   {original_width}×{original_height} → {new_width}×{new_height} px")
-
-    # 6. Масштабируем изображение
+    # 9. Масштабируем изображение
     scaled_image = cv2.resize(
         original_image,
         (new_width, new_height),
         interpolation=cv2.INTER_AREA if scale_factor < 1 else cv2.INTER_LANCZOS4
     )
 
-    # 7. Сохраняем если указан путь
+    # 10. Сохраняем если указан путь
     if output_path:
         cv2.imwrite(output_path, scaled_image)
         print(f"✅ Изображение сохранено: {output_path}")
@@ -518,6 +539,7 @@ def merge_rects_pipeline(plan_data, axis_tol=5.0, thick_tol=5.0, gap_tol=250.0, 
     """
     final_plan = {}
     stats = {}
+    gap_tol = max(gap_tol, 0.0)
 
     for category, polygons in plan_data.items():
         if not polygons:
@@ -562,11 +584,9 @@ def merge_rects_pipeline(plan_data, axis_tol=5.0, thick_tol=5.0, gap_tol=250.0, 
         # 3️⃣ ГРУППИРОВКА (по ориентации, толщине, оси с учётом допусков)
         groups = defaultdict(list)
         for p in props:
-            key = (
-                p['orient'],
-                round(p['thick'] / thick_tol) * thick_tol,
-                round(p['axis'] / axis_tol) * axis_tol
-            )
+            t_key = p['thick'] if thick_tol == 0 else round(p['thick'] / thick_tol) * thick_tol
+            a_key = p['axis'] if axis_tol == 0 else round(p['axis'] / axis_tol) * axis_tol
+            key = (p['orient'], t_key, a_key)
             groups[key].append(p)
 
         # 4️⃣ ОБЪЕДИНЕНИЕ (линейный проход с проверкой зазора)
@@ -628,6 +648,8 @@ def merge_wall_contours(wall_contours, axis_tol=5.0, thick_tol=5.0, gap_tol=250.
     if not wall_contours:
         return []
 
+    gap_tol = max(gap_tol, 0.0)
+
     # 1️⃣ РАЗБИВКА всех сложных контуров на простые прямоугольники
     decomposed = []
     for contour in wall_contours:
@@ -659,11 +681,9 @@ def merge_wall_contours(wall_contours, axis_tol=5.0, thick_tol=5.0, gap_tol=250.
     # 3️⃣ ГРУППИРОВКА
     groups = defaultdict(list)
     for p in props:
-        key = (
-            p['orient'],
-            round(p['thick'] / thick_tol) * thick_tol,
-            round(p['axis'] / axis_tol) * axis_tol
-        )
+        t_key = p['thick'] if thick_tol == 0 else round(p['thick'] / thick_tol) * thick_tol
+        a_key = p['axis'] if axis_tol == 0 else round(p['axis'] / axis_tol) * axis_tol
+        key = (p['orient'], t_key, a_key)
         groups[key].append(p)
 
     # 4️⃣ ОБЪЕДИНЕНИЕ

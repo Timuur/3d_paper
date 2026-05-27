@@ -4,6 +4,20 @@ import sys
 import cv2
 from gen_mod1 import get_file_path
 
+import time
+from functools import wraps
+
+def timing(func):
+    """Декоратор для замера времени выполнения функции"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        t0 = time.perf_counter()
+        result = func(*args, **kwargs)
+        t1 = time.perf_counter()
+        print(f"⏱ {func.__name__}: {(t1-t0)*1000:.1f} ms" if (t1-t0) < 1 else f"⏱ {func.__name__}: {t1-t0:.2f} sec")
+        return result
+    return wrapper
+
 try:
     import torch
     HAS_TORCH = True
@@ -44,6 +58,7 @@ def _load_model():
             print('❌ WARNING: Model path is invalid or model was not found.')
             sys.exit(1)
 
+        # device = "cpu"
         device = _get_device()
 
         # 1. Загружаем модель стандартным способом
@@ -57,7 +72,7 @@ def _load_model():
 
     return _model_cache, _labels_cache
 
-
+@timing
 def get_coord(img):
     """Получение детекций с использованием кэшированной модели"""
     model, labels = _load_model()
@@ -97,4 +112,4 @@ def clear_cache():
     except Exception as e:
         print(f"⚠️ Ошибка при очистке CUDA кэша: {e}")
 
-    print("🗑 Кэш модели check_img_ai очищен")
+    print(f"🗑 [{time.strftime('%H:%M:%S')}] Кэш модели check_img_ai очищен")
