@@ -199,15 +199,29 @@ class PlanEditorView(QGraphicsView):
         self.regions: list[EditableRegionItem] = []
 
     def set_background(self, image_path: str):
+        # Очищаем только пиксмапы, не регионы
+        for item in self.scene.items():
+            if isinstance(item, QGraphicsPixmapItem):
+                self.scene.removeItem(item)
+
         pixmap = QPixmap(image_path)
         if not pixmap.isNull():
             self.scene.addPixmap(pixmap)
-            self.setSceneRect(pixmap.rect())
-            self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+            self.scene.setSceneRect(pixmap.rect())
 
-        win = self.window()
-        if win and hasattr(win, 'statusBar'):
-            win.statusBar().showMessage("📐 Новый план загружен", 2000)
+            # 🔧 FIX: Явно устанавливаем масштаб и центрируем
+            self.resetTransform()
+            view_rect = self.viewport().rect()
+            scene_rect = self.scene.sceneRect()
+
+            # Вычисляем масштаб с сохранением пропорций
+            scale = min(
+                view_rect.width() / scene_rect.width(),
+                view_rect.height() / scene_rect.height()
+            ) * 0.95  # 95% для отступов
+
+            self.scale(scale, scale)
+            self.centerOn(scene_rect.center())
 
     def reset_editor(self):
         for item in self.regions:
@@ -249,6 +263,46 @@ class PlanEditorView(QGraphicsView):
         self.add_mode = enabled
         self.setDragMode(QGraphicsView.DragMode.NoDrag if enabled else QGraphicsView.DragMode.ScrollHandDrag)
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor if enabled else Qt.CursorShape.ArrowCursor))
+
+    def set_zoom_scale(self, scale: float):
+        """Устанавливает масштаб отображения сцены"""
+        # Сохраняем центр вида перед масштабированием
+        center = self.mapToScene(self.viewport().rect().center())
+
+        # Сбрасываем трансформацию и применяем новый масштаб
+        self.resetTransform()
+        self.scale(scale, scale)
+
+        # Возвращаем центр на место
+        self.centerOn(center)
+
+    def wheelEvent(self, event):
+        """Поддержка зума колёсиком мыши"""
+        # Зум колёсиком работает только когда не в режиме добавления
+        if not self.add_mode and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            delta = event.angleDelta().y()
+            current_scale = self.transform().m11()
+            current_percent = round(current_scale * 100)
+
+            # Плавное изменение масштаба
+            if delta > 0:
+                new_percent = min(500, current_percent + 1)
+            else:
+                new_percent = max(10, current_percent - 1)
+
+            # Обновляем слайдер синхронно
+            main_win = self.window()
+            if main_win and hasattr(main_win, 'zoom_slider'):
+                main_win.zoom_slider.blockSignals(True)
+                main_win.zoom_slider.setValue(new_percent)
+                main_win.zoom_label.setText(f"{new_percent}%")
+                main_win.zoom_slider.blockSignals(False)
+
+            self.set_zoom_scale(new_percent / 100.0)
+            event.accept()
+        else:
+            # Обычная прокрутка без Ctrl
+            super().wheelEvent(event)
 
     def mousePressEvent(self, event):
         if self.add_mode and event.button() == Qt.MouseButton.LeftButton:
@@ -344,7 +398,35 @@ class MainWindow(QMainWindow):
         self.btn_type_wall.toggled.connect(self._toggle_wall_mode)
         tools_layout.addWidget(self.btn_type_wall)
 
+        tools_layout.addSpacing(15)
+        tools_layout.addWidget(QLabel("🔍"))
+
+        self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
+        self.zoom_slider.setRange(10, 500)  # 10% - 500%
+        self.zoom_slider.setValue(100)
+        self.zoom_slider.setFixedWidth(200)
+        self.zoom_slider.setToolTip("Масштаб 2D-редактора")
+        self.zoom_slider.valueChanged.connect(self._on_zoom_changed)
+        tools_layout.addWidget(self.zoom_slider)
+
+        self.zoom_label = QLabel("100%")
+        self.zoom_label.setFixedWidth(40)
+        self.zoom_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.zoom_slider.setToolTip("🖱 Ctrl + колёсико для быстрого зума")
+        tools_layout.addWidget(self.zoom_label)
+
+        # Кнопка сброса зума (опционально)
+        btn_reset_zoom = QPushButton("⟲")
+        btn_reset_zoom.setFixedWidth(30)
+        btn_reset_zoom.setToolTip("Сбросить масштаб")
+        btn_reset_zoom.clicked.connect(self._reset_zoom)
+        tools_layout.addWidget(btn_reset_zoom)
+
         tools_layout.addStretch()
+        controls_layout.addLayout(tools_layout)
+
+        tools_layout.addStretch()
+        controls_layout.addLayout(tools_layout)
         controls_layout.addLayout(tools_layout)
 
         # --- 2. Строка параметров и действий ---
@@ -393,13 +475,6 @@ class MainWindow(QMainWindow):
         params_group_layout.addWidget(self.input_axis_tol)
 
         params_group_layout.addSpacing(10)
-
-        # self.input_thick_tol = QSpinBox()
-        # self.input_thick_tol.setRange(0, 100.0)
-        # self.input_thick_tol.setValue(5)
-        # params_group_layout.addWidget(QLabel("Допуск разницы толщины:"))
-        # params_group_layout.addWidget(self.input_thick_tol)
-        # params_group_layout.addSpacing(10)
 
         self.input_gap_tol = QSpinBox()
         self.input_gap_tol.setRange(0, 500.0)
@@ -491,43 +566,60 @@ class MainWindow(QMainWindow):
         status = f"🤖 ИИ: {recog:.2f} см/px | 3D: {gen:.2f} см/px" if is_ai else f"✏️ Ручной: {gen:.2f} см/px"
         self.progress_label.setText(status)
 
+    def _fit_plan_to_view(self):
+        if self.editor_2d.scene.items():
+            self.editor_2d.fitInView(self.editor_2d.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
+            self.editor_2d.resetTransform()
+
+    def _on_zoom_changed(self, value: int):
+        """Обработчик изменения слайдера зума"""
+        self.zoom_label.setText(f"{value}%")
+        scale = value / 100.0
+        self.editor_2d.set_zoom_scale(scale)
+
+    def _reset_zoom(self):
+        """Сброс зума к 100%"""
+        self.zoom_slider.setValue(100)
+        self.editor_2d.set_zoom_scale(1.0)
+
     def _select_plan(self):
         #TODO: проверить паралельность обработки, либо забить и указывать на долгую работу в первый запуск
         path, _ = QFileDialog.getOpenFileName(self, "Выберите план", "", "Images (*.png *.jpg *.jpeg *.bmp)")
         if not path: return
 
         self._plan_path = path
+        self.editor_2d.reset_editor()  # Очищаем старые регионы и фон
         self.current_scene = None
-        self.editor_2d.reset_editor()
-        self.editor_2d.set_background(path)
+        self.plotter.clear()
+        self.btn_save.setEnabled(False)
+        self.btn_export_gltf.setEnabled(False)
 
-        self.progress_label.setText("⏳ Масштабирование плана... ")
+        self.progress_label.setText("⏳ Масштабирование и обработка нейросетью...")
         QApplication.processEvents()
 
         try:
-            target_cm_px = self.input_scale_recog.value()
-            target_cm_px = target_cm_px / 10.0
+            target_cm_px = self.input_scale_recog.value() / 10.0  # Переводим в см/px для расчета
             resize_res = i2w.calculate_and_resize_image(self._plan_path, target_cm_per_pixel=target_cm_px)
             scaled_img = resize_res['scaled_image']
 
-            # Сохраняем отмасштабированное изображение
+            # Сохраняем отмасштабированный план во временный файл
             self._scaled_plan_path = "temp_scaled_plan.png"
             cv2.imwrite(self._scaled_plan_path, scaled_img)
 
-            self.progress_label.setText("⏳ Обработка плана нейросетью... ")
-            QApplication.processEvents()
+            # Запускаем ИИ на отмасштабированном изображении
+            _, _, regions_dict = i2w.process_floor_plan(self._scaled_plan_path, axis_tol=self.input_axis_tol.value(),
+                                                        gap_tol=self.input_gap_tol.value())
+            self._raw_contours = regions_dict
 
-            # Запускаем ИИ уже на отмасштабированном изображении
-            _, _, regions_dict = i2w.process_floor_plan(self._scaled_plan_path)
-            self._raw_contours = regions_dict  # Сохраняем для воркера
         except Exception as e:
-            QMessageBox.warning(self, "Ошибка ИИ", f"Не удалось обработать план: {e}")
+            QMessageBox.warning(self, "Ошибка ИИ", f"Не удалось обработать план:\n{e}")
             self.progress_label.setText("❌ Ошибка обработки")
             return
 
-        # Отображаем в 2D-редакторе уже масштабированный план
+        # 1️⃣ Загружаем фон в редактор (координаты останутся 1:1 с пикселями)
         self.editor_2d.set_background(self._scaled_plan_path)
 
+        # 2️⃣ Отображаем найденные области
         total_regions = 0
         for cls_name, polygons in regions_dict.items():
             if not polygons: continue
@@ -536,8 +628,11 @@ class MainWindow(QMainWindow):
                 self.editor_2d.add_region_from_ai(poly_list, cls=cls_name)
                 total_regions += 1
 
+        # 3️⃣ Финальная подгонка вида под все объекты (план + регионы)
         self.editor_2d.fitInView(self.editor_2d.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
-        self.progress_label.setText(f"✅ План загружен. Найдено {total_regions} объектов. ")
+        self.editor_2d.resetTransform()  # Убираем возможный "сдвиг" после fitInView
+
+        self.progress_label.setText(f"✅ План готов. Найдено {total_regions} объектов.")
 
     def _toggle_add_mode(self):
         self.editor_2d.set_add_mode(self.btn_add_region.isChecked())
