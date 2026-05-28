@@ -355,26 +355,27 @@ class MainWindow(QMainWindow):
         params_group_layout = QHBoxLayout(params_group)
         params_group_layout.setContentsMargins(5, 5, 5, 5)
 
-        self.input_scale = QDoubleSpinBox()
-        self.input_scale.setRange(0.001, 10.0)
-        self.input_scale.setValue(0.05)
-        self.input_scale.setDecimals(3)
-        params_group_layout.addWidget(QLabel("Масштаб:"))
-        params_group_layout.addWidget(self.input_scale)
+        # === Масштаб для распознавания (обработка изображения ИИ) ===
+        self.input_scale_recog = QDoubleSpinBox()
+        self.input_scale_recog.setRange(1, 30)  # см/px
+        self.input_scale_recog.setValue(5)
+        self.input_scale_recog.setDecimals(0)
+        self.input_scale_recog.setSingleStep(1)  # Шаг 0.01 при нажатии стрелок
+        self.input_scale_recog.setToolTip("Масштаб для обработки плана нейросетью (см на 1 пиксель)")
+        params_group_layout.addWidget(QLabel("Масштаб(распоз.) см/px:"))
+        params_group_layout.addWidget(self.input_scale_recog)
 
         params_group_layout.addSpacing(10)
 
-        self.input_target_scale = QDoubleSpinBox()
-        self.input_target_scale.setRange(0.01, 20.0)
-        self.input_target_scale.setValue(0.5)
-        self.input_target_scale.setDecimals(3)
-        self.input_target_scale.setToolTip("Целевой масштаб изображения (см на 1 пиксель)")
-
-        params_group_layout.addWidget(QLabel("Эталон (см/px): "))
-        params_group_layout.addWidget(self.input_target_scale)
-
-        # Авто-синхронизация: масштаб для 3D (м/px) всегда = эталон (см/px) / 100
-        self.input_target_scale.valueChanged.connect(lambda v: self.input_scale.setValue(v / 100.0))
+        # === Масштаб для генерации 3D модели ===
+        self.input_scale_gen = QDoubleSpinBox()
+        self.input_scale_gen.setRange(1, 30)  # см/px в UI
+        self.input_scale_gen.setValue(5)
+        self.input_scale_gen.setDecimals(0)
+        self.input_scale_gen.setSingleStep(1)  # Шаг 0.01 при нажатии стрелок
+        self.input_scale_gen.setToolTip("Масштаб для генерации 3D-модели (внутренне конвертируется в метры)")
+        params_group_layout.addWidget(QLabel("Масштаб(генер.) см/px:"))
+        params_group_layout.addWidget(self.input_scale_gen)
 
         params_group_layout.addSpacing(10)
 
@@ -485,7 +486,9 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.preview_splitter, stretch=1)
 
     def _toggle_wall_mode(self, is_ai):
-        status = " Режим: Сырые контуры ИИ" if is_ai else "✏️ Режим: Отредактированные контуры"
+        recog = self.input_scale_recog.value()
+        gen = self.input_scale_gen.value()
+        status = f"🤖 ИИ: {recog:.2f} см/px | 3D: {gen:.2f} см/px" if is_ai else f"✏️ Ручной: {gen:.2f} см/px"
         self.progress_label.setText(status)
 
     def _select_plan(self):
@@ -502,7 +505,8 @@ class MainWindow(QMainWindow):
         QApplication.processEvents()
 
         try:
-            target_cm_px = self.input_target_scale.value()
+            target_cm_px = self.input_scale_recog.value()
+            target_cm_px = target_cm_px / 10.0
             resize_res = i2w.calculate_and_resize_image(self._plan_path, target_cm_per_pixel=target_cm_px)
             scaled_img = resize_res['scaled_image']
 
@@ -578,7 +582,7 @@ class MainWindow(QMainWindow):
 
         self.worker = ProcessingWorker(
             getattr(self, '_scaled_plan_path', self._plan_path),
-            self.input_scale.value(),
+            self.input_scale_gen.value() / 100.0,
             self.input_height.value(),
             self.input_axis_tol.value(),
             # self.input_height.value(),
