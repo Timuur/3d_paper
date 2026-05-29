@@ -541,47 +541,50 @@ def merge_rects_pipeline(plan_data, axis_tol=5.0, thick_tol=5.0, gap_tol=250.0, 
     stats = {}
     gap_tol = max(gap_tol, 0.0)
 
+    target_cat = {'Wall', 'h-wall'}
+
     for category, polygons in plan_data.items():
+        if category not in target_cat:
+            final_plan[category] = polygons  # Возвращаем без изменений
+            continue
         if not polygons:
             final_plan[category] = []
             continue
 
-        # 1️⃣ РАЗБИВКА
-        decomposed = []
-        for poly_coords in polygons:
-            # Обрабатываем разные форматы входных данных
-            if isinstance(poly_coords, (list, tuple)) and len(poly_coords) > 0:
-                if isinstance(poly_coords[0], (list, tuple)):
-                    coords = np.array(poly_coords)
-                else:
-                    coords = np.array([p.ravel() if hasattr(p, 'ravel') else p for p in poly_coords])
-            elif isinstance(poly_coords, np.ndarray):
-                coords = poly_coords.squeeze() if poly_coords.ndim == 3 else poly_coords
+        # 1️⃣ ИЗВЛЕЧЕНИЕ СВОЙСТВ (без декомпозиции — работаем напрямую с прямоугольниками)
+        props = []
+        for rect_coords in polygons:
+            # Нормализация входных данных: приводим к numpy array (N, 2)
+            if isinstance(rect_coords, (list, tuple)):
+                coords = np.array(rect_coords)
+            elif isinstance(rect_coords, np.ndarray):
+                coords = rect_coords.squeeze() if rect_coords.ndim == 3 else rect_coords
             else:
                 continue
 
-            decomposed.extend(decompose_orthogonal_polygon(coords))
+            if coords.shape != (4, 2):
+                # Если это не 4 точки — пропускаем (или можно добавить логирование)
+                continue
 
-        if not decomposed:
-            final_plan[category] = []
-            continue
+            p = Polygon(coords)
+            if not p.is_valid or p.area == 0:
+                continue
 
-        # 2️⃣ ИЗВЛЕЧЕНИЕ СВОЙСТВ
-        props = []
-        for rect in decomposed:
-            p = Polygon(rect)
-            if not p.is_valid: continue
             minx, miny, maxx, maxy = p.bounds
             w, h = maxx - minx, maxy - miny
 
-            if w >= h:  # Горизонтальный
+            if w >= h:  # Горизонтальный прямоугольник
                 props.append({'poly': p, 'orient': 'H', 'thick': h,
                               'axis': (miny + maxy) / 2, 'start': minx, 'end': maxx})
-            else:  # Вертикальный
+            else:  # Вертикальный прямоугольник
                 props.append({'poly': p, 'orient': 'V', 'thick': w,
                               'axis': (minx + maxx) / 2, 'start': miny, 'end': maxy})
 
-        # 3️⃣ ГРУППИРОВКА (по ориентации, толщине, оси с учётом допусков)
+        if not props:
+            final_plan[category] = []
+            continue
+
+        # 2️⃣ ГРУППИРОВКА (по ориентации, толщине, оси с учётом допусков)
         groups = defaultdict(list)
         for p in props:
             t_key = p['thick'] if thick_tol == 0 else round(p['thick'] / thick_tol) * thick_tol
@@ -620,19 +623,19 @@ def merge_rects_pipeline(plan_data, axis_tol=5.0, thick_tol=5.0, gap_tol=250.0, 
         final_plan[category] = merged_rects
         stats[category] = {
             'before': len(polygons),
-            'decomposed': len(decomposed),
             'after': len(merged_rects),
             'unions_performed': merged_count
         }
 
-    if verbose:
-        print("\n📊 СТАТИСТИКА ОБЪЕДИНЕНИЯ ОБЪЕКТОВ")
-        print(f"{'Категория':<15} | {'Исходных':<8} | {'Разбито на':<10} | {'Итого':<8} | Объед.")
-        print("-" * 65)
+    if verbose and stats:
+        print("\n📊 СТАТИСТИКА ОБЪЕДИНЕНИЯ (только Wall / h-wall)")
+        print(f"{'Категория':<15} | {'Исходных':<8} | {'Итого':<8} | Объед.")
+        print("-" * 50)
         for cat, s in stats.items():
-            if s['before'] > 0:  # Показываем только категории с данными
-                print(
-                    f"{cat:<15} | {s['before']:<8} | {s['decomposed']:<10} | {s['after']:<8} | {s['unions_performed']}")
+            if s['before'] > 0:
+                print(f"{cat:<15} | {s['before']:<8} | {s['after']:<8} | {s['unions_performed']}")
+        if not stats:
+            print(f"⚠️ Целевые категории {target_cat} не найдены или пусты")
 
     return final_plan
 
@@ -643,39 +646,50 @@ def merge_wall_contours(wall_contours, axis_tol=5.0, thick_tol=5.0, gap_tol=250.
     1. Декомпозиция на простые прямоугольники
     2. Группировка по ориентации/толщине/оси
     3. Объединение коллинеарных сегментов с учётом зазора
-    4. Возврат в формате List[np.array] (совместимо с исходным кодом)
+    4. Возврат в формате List[np.array] + опциональная таблица статистики
     """
     if not wall_contours:
         return []
 
     gap_tol = max(gap_tol, 0.0)
+    n_walls = len(wall_contours)
+
+    # 📊 Инициализация статистики по каждой стене
+    wall_stats = [{'decomposed': 0, 'merges': 0, 'final_indices': set()} for _ in range(n_walls)]
 
     # 1️⃣ РАЗБИВКА всех сложных контуров на простые прямоугольники
     decomposed = []
-    for contour in wall_contours:
-        # Нормализуем входные данные
+    for i, contour in enumerate(wall_contours):
         if isinstance(contour, np.ndarray):
             coords = contour.squeeze() if contour.ndim == 3 else contour
         else:
             coords = np.array(contour)
-        decomposed.extend(decompose_orthogonal_polygon(coords))
+
+        rects = decompose_orthogonal_polygon(coords)
+        for r in rects:
+            # Сохраняем индекс исходной стены
+            decomposed.append((r, i))
 
     if not decomposed:
         return wall_contours  # Возвращаем как есть, если не удалось разбить
 
     # 2️⃣ ИЗВЛЕЧЕНИЕ СВОЙСТВ
     props = []
-    for rect in decomposed:
-        p = Polygon(rect)
+    for coords, src_idx in decomposed:
+        p = Polygon(coords)
         if not p.is_valid: continue
+
+        # Считаем, на сколько частей разбилась стена
+        wall_stats[src_idx]['decomposed'] += 1
+
         minx, miny, maxx, maxy = p.bounds
         w, h = maxx - minx, maxy - miny
 
         if w >= h:  # Горизонтальный
-            props.append({'poly': p, 'orient': 'H', 'thick': h,
+            props.append({'poly': p, 'source': src_idx, 'orient': 'H', 'thick': h,
                           'axis': (miny + maxy) / 2, 'start': minx, 'end': maxx})
         else:  # Вертикальный
-            props.append({'poly': p, 'orient': 'V', 'thick': w,
+            props.append({'poly': p, 'source': src_idx, 'orient': 'V', 'thick': w,
                           'axis': (minx + maxx) / 2, 'start': miny, 'end': maxy})
 
     # 3️⃣ ГРУППИРОВКА
@@ -688,18 +702,38 @@ def merge_wall_contours(wall_contours, axis_tol=5.0, thick_tol=5.0, gap_tol=250.
 
     # 4️⃣ ОБЪЕДИНЕНИЕ
     merged_rects = []
-    merged_count = 0
+    total_merged_count = 0
+    final_seg_idx = 0
+
     for key, items in groups.items():
         items.sort(key=lambda x: x['start'])
         if not items: continue
+
+        # Добавляем tracking источников для корректного учёта при слиянии
+        for item in items:
+            item['src_set'] = {item['source']}
 
         curr = items[0]
         for nxt in items[1:]:
             if nxt['start'] <= curr['end'] + gap_tol:
                 curr['end'] = max(curr['end'], nxt['end'])
                 curr['poly'] = unary_union([curr['poly'], nxt['poly']])
-                merged_count += 1
+
+                # 🔢 Учёт слияний: инкрементируем для всех стен, чьи куски участвуют
+                for src in curr['src_set']:
+                    wall_stats[src]['merges'] += 1
+                for src in nxt['src_set']:
+                    if src not in curr['src_set']:
+                        wall_stats[src]['merges'] += 1
+
+                curr['src_set'].update(nxt['src_set'])
+                total_merged_count += 1
             else:
+                # 🏁 Фиксируем итоговый сегмент
+                for src in curr['src_set']:
+                    wall_stats[src]['final_indices'].add(final_seg_idx)
+                final_seg_idx += 1
+
                 mb = curr['poly'].bounds
                 merged_rects.append(np.array([
                     [mb[0], mb[1]], [mb[2], mb[1]],
@@ -707,14 +741,25 @@ def merge_wall_contours(wall_contours, axis_tol=5.0, thick_tol=5.0, gap_tol=250.
                 ]))
                 curr = nxt
 
+        # Фиксируем последний сегмент в группе
+        for src in curr['src_set']:
+            wall_stats[src]['final_indices'].add(final_seg_idx)
+        final_seg_idx += 1
+
         mb = curr['poly'].bounds
         merged_rects.append(np.array([
             [mb[0], mb[1]], [mb[2], mb[1]],
             [mb[2], mb[3]], [mb[0], mb[3]]
         ]))
 
-    if verbose and merged_count > 0:
+    # 📊 Вывод таблицы при verbose=True
+    if verbose:
+        print("\n📊 Статистика обработки стен:")
+        print(f"{'Стена':<6} | {'Разбилось на':<12} | {'Слияний':<9} | {'Итоговых сегментов':<19}")
+        print("-" * 55)
+        for i, stat in enumerate(wall_stats):
+            print(f"{i:<6} | {stat['decomposed']:<12} | {stat['merges']:<9} | {len(stat['final_indices']):<19}")
         print(
-            f"🧱 Стены: {len(wall_contours)} сложных → {len(decomposed)} простых → {len(merged_rects)} объединённых (+{merged_count} слияний)")
+            f"\n🧱 Итого: {n_walls} сложных → {len(decomposed)} простых → {len(merged_rects)} объединённых (+{total_merged_count} слияний)\n")
 
     return merged_rects

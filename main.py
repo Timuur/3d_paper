@@ -479,7 +479,7 @@ class MainWindow(QMainWindow):
         self.input_gap_tol = QSpinBox()
         self.input_gap_tol.setRange(0, 500.0)
         self.input_gap_tol.setValue(250)
-        params_group_layout.addWidget(QLabel("Максимальный разрыв для объединения:"))
+        params_group_layout.addWidget(QLabel("Макс. разрыв для слияния:"))
         params_group_layout.addWidget(self.input_gap_tol)
 
         params_group_layout.addSpacing(10)
